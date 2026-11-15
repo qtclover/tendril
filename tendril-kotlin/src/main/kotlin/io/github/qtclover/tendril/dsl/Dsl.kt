@@ -1,0 +1,96 @@
+package io.github.qtclover.tendril.dsl
+
+import io.github.qtclover.tendril.At
+import io.github.qtclover.tendril.CallInfo
+import io.github.qtclover.tendril.Hook
+import io.github.qtclover.tendril.Injection
+import io.github.qtclover.tendril.InjectionBatch
+import io.github.qtclover.tendril.Injector
+import kotlin.reflect.KClass
+
+@DslMarker
+@Target(AnnotationTarget.CLASS)
+public annotation class TendrilDsl
+
+/**
+ * Hooks methods of [T], which is loaded if it is not already.
+ *
+ * ```
+ * val hooks = inject<PlayerService> {
+ *     method("damage") {
+ *         atHead { call -> if (call.arg<Int>(0) > 100) call.cancel() }
+ *         atReturn { call -> println("health is now ${call.self<PlayerService>().health}") }
+ *     }
+ * }
+ * hooks.remove()
+ * ```
+ *
+ * Everything in the block is installed together, attaching to the JVM first if
+ * that has not happened yet. The returned [Injection] removes all of it again.
+ */
+public inline fun <reified T : Any> inject(noinline block: ClassScope.() -> Unit): Injection =
+    inject(T::class.java.name, block)
+
+/** Like [inject], for a class you have as a [KClass]. */
+public fun inject(target: KClass<*>, block: ClassScope.() -> Unit): Injection =
+    inject(target.java.name, block)
+
+/**
+ * Like [inject], by binary class name (`com.example.Outer$Inner`). The class is not
+ * loaded; if it is not in the JVM yet, the hooks are woven in when it arrives.
+ */
+public fun inject(className: String, block: ClassScope.() -> Unit): Injection {
+    val batch = Injector.batch()
+    ClassScope(className, batch).block()
+    return batch.install()
+}
+
+@TendrilDsl
+public class ClassScope internal constructor(
+    private val className: String,
+    private val batch: InjectionBatch,
+) {
+    /** Every method called [name], whatever its parameters. */
+    public fun method(name: String, block: MethodScope.() -> Unit) {
+        MethodScope(className, name, null, batch).block()
+    }
+
+    /**
+     * One overload of [name], picked by its parameter types: `method("damage", Int::class)`.
+     * `Int::class` and friends mean the primitive types; for a boxed `java.lang.Integer`
+     * parameter, or a method with no parameters, use the descriptor overload.
+     */
+    public fun method(name: String, vararg parameters: KClass<*>, block: MethodScope.() -> Unit) {
+        val descriptor = parameters.joinToString("", "(", ")") { it.java.descriptorString() }
+        MethodScope(className, name, descriptor, batch).block()
+    }
+
+    /**
+     * One overload of [name], picked by JVM descriptor: complete (`"(I)V"`) or just the
+     * parameter part (`"(I)"`, `"()"`).
+     */
+    public fun method(name: String, descriptor: String, block: MethodScope.() -> Unit) {
+        MethodScope(className, name, descriptor, batch).block()
+    }
+}
+
+@TendrilDsl
+public class MethodScope internal constructor(
+    private val className: String,
+    private val methodName: String,
+    private val descriptor: String?,
+    private val batch: InjectionBatch,
+) {
+    /** Runs [hook] before the method body. */
+    public fun atHead(hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.HEAD, Hook(hook))
+    }
+
+    /** Runs [hook] before every normal return. */
+    public fun atReturn(hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.RETURN, Hook(hook))
+    }
+}
+
+/** The return value, cast: `call.resultAs<String>()`. */
+public inline fun <reified T> CallInfo.resultAs(): T = result as T
