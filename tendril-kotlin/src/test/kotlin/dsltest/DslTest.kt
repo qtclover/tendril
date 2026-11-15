@@ -32,6 +32,10 @@ class PlayerService {
     }
 }
 
+class Greeter(private val player: PlayerService) {
+    fun welcome(name: String): String = player.greet(name) + " " + player.describe(1) + " " + player.describe(2)
+}
+
 object Counter {
     fun next(current: Int): Int = current + 1
 }
@@ -142,6 +146,24 @@ class DslTest {
 
         hooks.close()
         assertEquals("late", late.javaClass.getMethod("name").invoke(late))
+    }
+
+    @Test
+    fun `calls inside a method can be hooked`() {
+        val greeter = Greeter(player)
+        assertEquals("Hello, Ada int 1 int 2", greeter.welcome("Ada"))
+
+        val hooks = inject<Greeter> {
+            method("welcome") {
+                atInvoke("PlayerService.greet") { it.invoked().setArg(0, "Grace") }
+                atInvoke("describe", ordinal = 1) { it.invoked().skip("skipped") }
+                afterInvoke("describe", ordinal = 0) { it.invoked().result = "${it.invoked().result}!" }
+            }
+        }
+        assertEquals("Hello, Grace int 1! skipped", greeter.welcome("Ada"))
+
+        hooks.remove()
+        assertEquals("Hello, Ada int 1 int 2", greeter.welcome("Ada"))
     }
 
     @Test

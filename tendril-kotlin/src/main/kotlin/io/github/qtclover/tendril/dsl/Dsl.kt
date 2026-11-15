@@ -90,6 +90,26 @@ public class MethodScope internal constructor(
     public fun atReturn(hook: (CallInfo) -> Unit) {
         batch.add(className, methodName, descriptor, At.RETURN, Hook(hook))
     }
+
+    /**
+     * Runs [hook] just before a call inside the method. [call] is `"name"`,
+     * `"Owner.name"`, or either followed by a descriptor. The hook reaches the call
+     * through `invoked()` and can change its arguments or skip it:
+     *
+     * ```
+     * atInvoke("PricingService.priceOf") { it.invoked().setArg(1, 1) }
+     * ```
+     *
+     * @param ordinal which of the matching calls, counted from 0; every one by default
+     */
+    public fun atInvoke(call: String, ordinal: Int = -1, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.INVOKE, call, ordinal, Hook(hook))
+    }
+
+    /** Runs [hook] just after a call inside the method returns; it can read and replace the result. */
+    public fun afterInvoke(call: String, ordinal: Int = -1, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.AFTER_INVOKE, call, ordinal, Hook(hook))
+    }
 }
 
 /** The return value, cast: `call.resultAs<String>()`. */
