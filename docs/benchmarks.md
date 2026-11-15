@@ -17,7 +17,7 @@ overhead. Each scenario has its own copy of the same method, `int add(int a, int
 
 Measured with JMH 1.37 (average time, 4 warm-up and 6 measurement iterations of one
 second, one fork) on an AMD Ryzen 9 5900X, OpenJDK 25.0.5, Linux. The error reported by
-JMH was below 5% for every row. Raw numbers are whatever your machine says; the ratios
+JMH was below 7% for every row. Raw numbers are whatever your machine says; the ratios
 are the point.
 
 ## Reading the numbers

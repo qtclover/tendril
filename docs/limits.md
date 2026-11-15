@@ -2,17 +2,17 @@
 
 What Tendril cannot do, or does in a way you should know about.
 
-**Scope of v0.1**
+**Scope of v0.2**
 
-- Hooks go at the head of a method, before its returns, and before or after a call inside
-  it. There are no field access hooks and no hooks on exceptional exit.
-- A method can only be cancelled at its head. From an invoke point you can skip the call
-  or replace its result, but not make the surrounding method return: leaving a method from
-  the middle would jump over its `finally` blocks and leave monitors held.
-- Constructor calls (`new Foo(...)`) and `invokedynamic` call sites (lambdas, string
-  concatenation) cannot be hooked as invoke points.
-- Constructors and static initialisers cannot be hooked. Nor can `abstract` and `native`
-  methods: they have no body.
+- Hooks go at the head of a method, before its returns, where an exception leaves it,
+  and around calls, `new` expressions and field accesses inside it.
+- A method can only be cancelled at its head. From a point inside it you can skip the
+  call or replace its result, but not make the surrounding method return: leaving a
+  method from the middle would jump over its `finally` blocks and leave monitors held.
+- Constructors can be hooked but not cancelled, and nothing inside a constructor can be
+  hooked before its `super(...)` or `this(...)` call has returned.
+- Static initialisers, and `abstract` and `native` methods, cannot be hooked.
+- `invokedynamic` call sites (lambdas, string concatenation) cannot be hooked as points.
 - Hooks can observe and steer a method. They cannot add methods, fields or interfaces to a
   class; the JVM does not allow that for loaded classes (see [How it works](how-it-works.md)).
 
@@ -41,6 +41,21 @@ What Tendril cannot do, or does in a way you should know about.
   They almost always are; a public method that takes a package-private class of another
   package is the exception, and a hooked call to it fails with `IllegalAccessError`.
 - An after-hook does not run when the call throws.
+- Reading a compile-time constant (`static final int LIMIT = 1000`) is not a field
+  access in the bytecode; the value is copied into the method. Kotlin property access
+  from another class goes through a getter, which is a call, not a field access.
+- Local variables need debug information in the class file, and are only as reliable as
+  it is. A variable the current statement has already read keeps the old value.
+
+**Patterns and direct hooks**
+
+- Subtype and name patterns never match JDK classes or Tendril itself, and skip classes
+  that do not declare the method. Nothing warns you if a pattern matches nothing.
+- A name pattern is checked against every class the JVM loads while it is installed.
+  `"*"` works, and re-transforms every loaded application class.
+- Direct hooks can only observe, need a loaded target class, and must be visible from
+  it. The re-entrancy protection of ordinary hooks does not apply to them, and an
+  exception from a direct return hook is seen by throw hooks.
 
 **JDK classes**
 

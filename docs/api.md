@@ -167,8 +167,137 @@ Which calls a hook applies to:
 | `"priceOf"`                       | every call to a method named `priceOf`                 |
 | `"Pricing.priceOf"`               | only those on `Pricing` (simple or full class name)    |
 | `"priceOf(Ljava/lang/String;I)"`  | only that overload                                     |
+| `"new Widget"`                    | constructor calls: `new Widget(...)`                   |
 | `ordinal = 1`                     | of the matching calls, only the second                 |
 
 If nothing in the method matches, installing fails and the error lists the calls the
 method does make. A skip stops the remaining `INVOKE` hooks; `AFTER_INVOKE` hooks still
 run, with the substituted value. See [Limits](limits.md) for what cannot be matched.
+
+A `new Widget(a, b)` expression is a call named `<init>` with no receiver whose result
+is the new object. `setArg` changes the constructor arguments, an after-hook can replace
+the object, and `skip(other)` uses `other` without constructing anything.
+
+## Exceptions
+
+```kotlin
+inject<PlayerService> {
+    method("parse") {
+        atThrow { call ->
+            println("parse(${call.arg<String>(0)}) failed: ${call.thrown}")
+            call.result = -1          // swallow it and return -1 instead
+        }
+    }
+}
+```
+
+A hook at `THROW` runs when an exception is about to leave the method.
+
+| Member            | Effect                                                         |
+|-------------------|----------------------------------------------------------------|
+| `getThrown()`     | the exception                                                  |
+| `setThrown(t)`    | throw `t` instead                                              |
+| `swallow()`       | return normally with `null` / `0` / `false`                    |
+| `setResult(v)`    | return `v` normally                                            |
+
+It does not run for exceptions the method catches itself, nor for exceptions thrown by
+hooks. Return hooks do not run for a method that ended by swallowing.
+
+## Constructors
+
+```kotlin
+inject<Widget> {
+    constructor(Int::class) {
+        atHead { call -> call.setArg(0, 9) }                       // after super(...) has returned
+        atReturn { call -> println("built ${call.self<Widget>()}") }
+    }
+}
+```
+
+Java: `Injector.into(Widget.class).constructor(int.class).atHead(...)`, or
+`@Inject(target = Widget.class, method = "<init>", ...)`. `constructor()` without
+parameter types means every constructor. A head hook runs once `super(...)` or
+`this(...)` has returned, so `self()` is a real object, and argument changes affect the
+rest of the constructor only. A constructor cannot be cancelled and its exception cannot
+be swallowed: either would hand out a half-built object.
+
+## Fields
+
+```kotlin
+inject<Account> {
+    method("balance") {
+        onFieldRead("balance") { it.invoked().result = 0L }        // what the method sees
+    }
+    method("deposit") {
+        onFieldWrite("Account.balance") { call ->
+            if (call.invoked().arg<Long>(0) < 0) call.invoked().skip()   // refuse the write
+        }
+    }
+}
+```
+
+Field accesses reuse `invoked()`. A read is a call with no arguments whose result is the
+value read; the hook runs after the read and `setResult` substitutes a value. A write is
+a call with the new value as argument 0; the hook runs before it, `setArg(0, v)` changes
+the value and `skip()` drops the write. Java: `.onFieldRead("balance", hook)`, or
+`@Inject(..., at = At.FIELD_READ, invoke = "balance")`.
+
+## Local variables
+
+A hook at a point inside a method can ask for the method's local variables:
+
+```kotlin
+method("settle") {
+    afterInvoke("fee", locals = true) { call ->
+        if (call.local<Int>("i") == 3) call.setLocal("note", "third")
+    }
+}
+```
+
+Java: `.method("settle").withLocals().afterInvoke("fee", hook)`, or `locals = true` on
+`@Inject`. `localNames()` lists what is in scope. This needs the class to be compiled
+with debug information (`javac -g`, the default in Gradle and Maven; Kotlin always
+includes it), and it is opt-in because that information is not verified by the JVM.
+A value the current statement has already read is not affected: in `total += fee(i)`,
+`total` is read before `fee` is called.
+
+## Many classes at once
+
+| Target                         | Hooks                                                  |
+|--------------------------------|--------------------------------------------------------|
+| `"com.example.Shape+"`         | `Shape` and every class that extends or implements it  |
+| `"com.example.*"`              | every class whose name matches; `*` is any characters  |
+
+```kotlin
+injectSubtypes<Shape> { method("area") { atReturn { println(it.result) } } }
+inject("com.example.service.*") { method("handle") { atHead { println(it.methodName()) } } }
+```
+
+Java: `Injector.intoSubtypes(Shape.class)`, `Injector.intoMatching("com.example.*")`, or
+`@Inject(target = Shape.class, subtypes = true, ...)`. Both apply to classes already
+loaded and to classes as they load. A matching class that does not declare the method
+itself is left alone, and JDK classes never match a pattern.
+
+## Direct hooks
+
+An ordinary hook receives a `CallInfo`, which means boxing and a trip through the
+dispatcher. A direct hook is a public static method whose parameters are the receiver
+(unless the target is static), the target's parameters and, at `RETURN`, its result:
+
+```java
+public final class Metrics {
+    @Inject(target = PlayerService.class, method = "damage", direct = true)
+    public static void onDamage(PlayerService self, int amount) { ... }
+
+    @Inject(target = PlayerService.class, method = "add", at = At.RETURN, direct = true)
+    public static void afterAdd(PlayerService self, int a, int b, int result) { ... }
+}
+```
+
+It is called straight from the target method, several times cheaper than an
+ordinary hook (see [benchmarks](benchmarks.md)). In exchange it can only observe, exists
+for `HEAD` and `RETURN` only, needs a loaded target class given as `target = X.class`,
+and the hook class must be public and visible from the target's class loader, which
+rules out JDK classes. The overload hooked follows from the parameter types. The fluent
+form is `.method("damage").direct(At.HEAD, Metrics.class, "onDamage")`.
+

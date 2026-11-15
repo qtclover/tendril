@@ -31,6 +31,10 @@ instruction, exit code before each `xRETURN`. Arguments and return values are bo
 call and unboxed after it, with the right instructions for each of the eight primitive
 types, for `void`, and for `long`/`double` taking two local variable slots.
 
+The whole body is also put inside a catch-all handler, declared after the method's own
+handlers so that those keep priority. It asks `Bridge.thrown(ctx, t)` what to do and
+either rethrows or returns the value a hook supplied. That is the throw hook.
+
 A hooked call inside the method is wrapped in place. `price = pricing.priceOf(item, qty)`
 becomes:
 
@@ -50,6 +54,17 @@ among the call instructions of the method, which is stable because every transfo
 starts from the original class file. Whatever else is on the stack underneath stays put,
 including a half-constructed object when the call is a constructor argument, as in
 `new StringBuilder(decorate(text))`.
+
+Field reads and writes go through the same wrapper, as calls with zero or one argument.
+So do the constructor calls of `new` expressions, where the wrapper has to know that two
+references to the not-yet-initialised object sit under the arguments. Before weaving,
+the class is scanned once with ASM's tree API to list these instructions per method, to
+mark the ones that cannot be touched (anything before a constructor's `super(...)`
+returns), and to read which local variables are in scope at each of them.
+
+A direct hook skips all of this. It is woven as `Hooks.onDamage(this, amount)`: load the
+receiver and arguments, `invokestatic`. Because that lives in the bytecode rather than
+in a table, adding or removing one always re-transforms the class.
 
 ## 2. The dispatcher has to be visible from the hooked class
 

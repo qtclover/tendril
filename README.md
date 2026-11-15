@@ -43,13 +43,19 @@ inject<Shop> {
 
 ## What a hook can do
 
-- Run at the **head** of a method, before every **return**, or around one particular
-  **call inside** the method.
-- **Cancel** the call, with or without a return value.
-- Read and **change arguments**, replace the **return value**, reach `this`.
-- For a call inside the method: change its arguments, **skip** it, or replace its result.
-- Target classes that are **already loaded** or that load later, including JDK classes.
+- Run at the **head** of a method, before every **return**, or when it **throws**.
+- **Cancel** the call, replace the **return value**, swallow or replace the exception.
+- Read and **change arguments**, reach `this`.
+- Wrap one **call inside** the method: change its arguments, skip it, replace its result.
+  The same for `new` expressions and for **field reads and writes**.
+- Read and change the method's **local variables** at such a point.
+- Target **constructors**, classes that are **already loaded** or load later, JDK classes,
+  every **subtype** of a class (`"com.example.Shape+"`) or every class matching a
+  **pattern** (`"com.example.*"`).
 - Be **removed** at any time, which restores the exact original bytecode.
+
+For methods called millions of times a second there are **direct hooks**: a plain static
+call with the real arguments, no boxing. See the [benchmarks](docs/benchmarks.md).
 
 ## Install
 
@@ -63,30 +69,49 @@ Not on Maven Central yet. Build it into your local Maven repository:
 repositories { mavenLocal(); mavenCentral() }
 
 dependencies {
-    implementation("io.github.qtclover:tendril-kotlin:0.1.0")   // Kotlin DSL + core
-    // Java only: implementation("io.github.qtclover:tendril-core:0.1.0")
+    implementation("io.github.qtclover:tendril-kotlin:0.2.0")   // Kotlin DSL + core
+    // Java only: implementation("io.github.qtclover:tendril-core:0.2.0")
 }
 ```
 
 Needs Java 17 or newer.
 
+## Hooking an application you cannot change
+
+`tendril-agent-all` is one self-contained jar. It works as a `-javaagent`:
+
+```bash
+java -javaagent:tendril-agent-all-0.2.0.jar="hooks=com.example.Hooks;classpath=hooks.jar" -jar app.jar
+```
+
+and as a tool that hooks a JVM which is already running, and unhooks it again:
+
+```bash
+java -jar tendril-agent-all-0.2.0.jar attach 12345 --hooks com.example.Hooks --classpath hooks.jar
+```
+
+```bash
+java -jar tendril-agent-all-0.2.0.jar detach 12345
+```
+
 ## Good to know
 
 - Tendril loads its agent into the running JVM on first use. JDK 21+ prints a warning
-  about that unless you pass `-XX:+EnableDynamicAgentLoading` or use
-  `-javaagent:tendril-agent.jar` instead.
-- Hooks go at method head, at returns and around calls. No constructors, no field hooks,
-  no hooks on thrown exceptions yet.
-- A hooked call boxes its arguments, so keep hooks out of hot inner loops.
-- This is v0.1. For production, use Byte Buddy.
+  about that unless you pass `-XX:+EnableDynamicAgentLoading` or use `-javaagent`.
+- An ordinary hook costs about 7 to 25 ns per call, a direct hook about 3 ns.
+- No static initialisers, no `invokedynamic` call sites, and a method can only be
+  cancelled at its head. The [limits](docs/limits.md) page has the full list.
+- This is v0.2 and young. For production, use Byte Buddy.
 
 ## Docs
 
-- [Using Tendril](docs/api.md): the Kotlin DSL, annotations, fluent Java API, picking overloads.
-- [Attaching](docs/attaching.md): self-attach, `-javaagent`, the JDK 21+ warning.
+- [Using Tendril](docs/api.md): every kind of hook, in Kotlin and Java.
+- [Attaching](docs/attaching.md): self-attach, `-javaagent`, the standalone jar, attach by pid.
 - [How it works](docs/how-it-works.md): the bytecode, the bootstrap bridge, undo, the verifier.
 - [Limits](docs/limits.md): everything it cannot do.
+- [Benchmarks](docs/benchmarks.md): what a hooked call costs.
 - [Comparison](docs/comparison.md) with Byte Buddy, Mixin, Javassist and InjectAPI.
+- [Releasing](docs/releasing.md): how a version gets to Maven Central.
 
 ## Try it
 

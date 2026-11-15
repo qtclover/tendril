@@ -3,7 +3,7 @@
 |                         | Tendril                    | Byte Buddy                  | Mixin (SpongePowered)          | Javassist                    |
 |-------------------------|----------------------------|-----------------------------|--------------------------------|------------------------------|
 | Level                   | hooks on existing methods  | general code generation     | class patching for mods        | source-level bytecode editing |
-| Injection points        | head, return, invoke       | anything, incl. custom ASM  | head, return, invoke, field, constant, ... | anywhere, as Java source strings |
+| Injection points        | head, return, throw, invoke, new, field | anything, incl. custom ASM  | head, return, invoke, field, constant, ... | anywhere, as Java source strings |
 | Already-loaded classes  | yes                        | yes (`Advice` + agent)      | no, load time only             | yes, via `Instrumentation` or HotSwap |
 | Undo at run time        | yes, `Injection.remove()`  | yes, `ResettableClassFileTransformer` | no                  | manual                       |
 | Needs                   | nothing, or `-javaagent`   | `byte-buddy-agent` or `-javaagent` | a launcher/mod loader that hosts it | you supply the `Instrumentation` |
@@ -30,3 +30,7 @@
   agent yourself, name methods by descriptor, and capture arguments by opcode and local
   variable slot. Both offer head, return and invoke points. Tendril attaches itself,
   addresses arguments by index, and can undo a hook.
+
+Where Byte Buddy inlines advice into the target, Tendril's ordinary hooks go through a
+dispatcher, which costs 7 to 25 ns per call. Its direct hooks are a plain static call
+and cost about 3 ns, but can only observe. See [benchmarks](benchmarks.md).
