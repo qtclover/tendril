@@ -47,4 +47,10 @@ public @interface Inject {
 
     /** With {@link #invoke()}: which of the matching calls, counted from 0. Negative means all. */
     int ordinal() default -1;
+
+    /**
+     * For points inside a method: capture the method's local variables, for
+     * {@link CallInfo#local} and {@link CallInfo#setLocal}.
+     */
+    boolean locals() default false;
 }

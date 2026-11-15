@@ -12,11 +12,13 @@ import org.objectweb.asm.commons.Method;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.LocalVariableNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,7 +75,7 @@ final class Weaver {
     private static final Method THROWN = new Method("thrown",
             "(Ljava/lang/Object;Ljava/lang/Throwable;)Ljava/lang/Throwable;");
     private static final Method BEFORE_CALL = new Method("beforeCall",
-            "(Ljava/lang/Object;ILjava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
+            "(Ljava/lang/Object;ILjava/lang/Object;[Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
     private static final Method SKIPPED = new Method("skipped", "(Ljava/lang/Object;)Z");
     private static final Method CALL_RESULT = new Method("callResult", "(Ljava/lang/Object;)Ljava/lang/Object;");
     private static final Method AFTER_CALL = new Method("afterCall",
@@ -105,6 +107,7 @@ final class Weaver {
 
     private static List<CallRef> scan(MethodNode method) {
         List<CallRef> found = new ArrayList<>();
+        Scopes scopes = new Scopes(method);
         // In a constructor nothing can be wrapped until super(...) or this(...) has
         // returned: before that "this" is not an object yet and the woven head code,
         // which sets up the context, has not run.
@@ -122,21 +125,61 @@ final class Weaver {
             } else if (insn instanceof FieldInsnNode field) {
                 boolean read = field.getOpcode() == Opcodes.GETFIELD || field.getOpcode() == Opcodes.GETSTATIC;
                 found.add(new CallRef(read ? CallRef.Kind.FIELD_READ : CallRef.Kind.FIELD_WRITE, field.owner,
-                        field.name, read ? "()" + field.desc : "(" + field.desc + ")V", ready));
+                        field.name, read ? "()" + field.desc : "(" + field.desc + ")V", ready, scopes.at(insn)));
             } else if (insn instanceof MethodInsnNode call) {
                 if (!call.name.equals("<init>")) {
-                    found.add(new CallRef(CallRef.Kind.CALL, call.owner, call.name, call.desc, ready));
+                    found.add(new CallRef(CallRef.Kind.CALL, call.owner, call.name, call.desc, ready,
+                            scopes.at(insn)));
                 } else if (!pendingNew.isEmpty()) {
                     boolean duplicated = pendingNew.pop();
-                    found.add(new CallRef(CallRef.Kind.NEW, call.owner, call.name, call.desc, ready && duplicated));
+                    found.add(new CallRef(CallRef.Kind.NEW, call.owner, call.name, call.desc, ready && duplicated,
+                            scopes.at(insn)));
                 } else {
                     // The super(...) or this(...) call of a constructor.
-                    found.add(new CallRef(CallRef.Kind.CALL, call.owner, call.name, call.desc, false));
+                    found.add(new CallRef(CallRef.Kind.CALL, call.owner, call.name, call.desc, false, null));
                     ready = true;
                 }
             }
         }
         return found;
+    }
+
+    /** Works out which named local variables are in scope at an instruction. */
+    private static final class Scopes {
+        private final MethodNode method;
+        private final boolean available;
+
+        Scopes(MethodNode method) {
+            this.method = method;
+            // A method compiled with debug information names at least "this" or its
+            // parameters. Only a static method without parameters can legitimately
+            // have an empty table.
+            boolean needsEntries = (method.access & Opcodes.ACC_STATIC) == 0
+                    || Type.getArgumentTypes(method.desc).length > 0;
+            this.available = method.localVariables != null
+                    && (!method.localVariables.isEmpty() || !needsEntries);
+        }
+
+        List<LocalRef> at(AbstractInsnNode insn) {
+            if (!available) {
+                return null;
+            }
+            int position = method.instructions.indexOf(insn);
+            boolean isStatic = (method.access & Opcodes.ACC_STATIC) != 0;
+            List<LocalRef> inScope = new ArrayList<>();
+            for (LocalVariableNode variable : method.localVariables) {
+                if (!isStatic && variable.index == 0) {
+                    continue; // "this" is not a variable anyone should reassign.
+                }
+                if (method.instructions.indexOf(variable.start) <= position
+                        && position < method.instructions.indexOf(variable.end)) {
+                    inScope.add(new LocalRef(variable.name, variable.desc, variable.index));
+                }
+            }
+            // Slot order is declaration order, which is what a reader expects.
+            inScope.sort(Comparator.comparingInt(LocalRef::slot));
+            return inScope;
+        }
     }
 
     static byte[] weave(ClassReader reader, ClassLoader loader, Map<String, ClassPlan.Weave> plan) {
@@ -373,7 +416,27 @@ final class Weaver {
             }
             storeLocal(argsLocal);
 
-            // Object call = Bridge.beforeCall(ctx, pointId, receiver, callArgs);
+            // Object[] locals = { boxed local variables in scope };   (only if a hook asked)
+            List<LocalRef> captured = point.captureLocals ? point.call.locals() : null;
+            int localsLocal = -1;
+            if (captured != null) {
+                localsLocal = newLocal(OBJECT_ARRAY);
+                push(captured.size());
+                newArray(OBJECT);
+                for (int i = 0; i < captured.size(); i++) {
+                    Type type = Type.getType(captured.get(i).desc());
+                    dup();
+                    push(i);
+                    // Through "this", not "mv": the slot is one of the original method's
+                    // and has to go through the same renumbering as its own instructions.
+                    visitVarInsn(type.getOpcode(ILOAD), captured.get(i).slot());
+                    valueOf(type);
+                    arrayStore(OBJECT);
+                }
+                storeLocal(localsLocal);
+            }
+
+            // Object call = Bridge.beforeCall(ctx, pointId, receiver, callArgs, locals);
             int callLocal = newLocal(OBJECT);
             loadLocal(contextLocal);
             push(point.id);
@@ -383,8 +446,14 @@ final class Weaver {
                 visitInsn(ACONST_NULL);
             }
             loadLocal(argsLocal);
+            if (captured != null) {
+                loadLocal(localsLocal);
+            } else {
+                visitInsn(ACONST_NULL);
+            }
             invokeStatic(BRIDGE, BEFORE_CALL);
             storeLocal(callLocal);
+            copyBack(captured, localsLocal);
 
             // if (Bridge.skipped(call)) result = (T) Bridge.callResult(call);
             // else result = receiver.name(callArgs...);
@@ -428,6 +497,22 @@ final class Weaver {
                 swap();
                 invokeStatic(BRIDGE, AFTER_CALL);
                 unbox(result);
+            }
+            copyBack(captured, localsLocal);
+        }
+
+        /** Stores the (possibly changed) captured values back into their variables. */
+        private void copyBack(List<LocalRef> captured, int localsLocal) {
+            if (captured == null) {
+                return;
+            }
+            for (int i = 0; i < captured.size(); i++) {
+                Type type = Type.getType(captured.get(i).desc());
+                loadLocal(localsLocal);
+                push(i);
+                arrayLoad(OBJECT);
+                unbox(type);
+                visitVarInsn(type.getOpcode(ISTORE), captured.get(i).slot());
             }
         }
     }

@@ -4,6 +4,8 @@ import io.github.qtclover.tendril.At;
 import io.github.qtclover.tendril.CallInfo;
 import io.github.qtclover.tendril.InvokedCall;
 
+import java.util.List;
+
 final class CallInfoImpl implements CallInfo {
 
     final Site site;
@@ -16,6 +18,8 @@ final class CallInfoImpl implements CallInfo {
     boolean cancelled;
     Object result;
     InvokedCallImpl invoked;
+    /** The hook that is running right now. */
+    InjectionImpl current;
     Throwable thrown;
     boolean swallowed;
     /** Set when a hook threw: that exception is the hook's business, not something for throw hooks. */
@@ -168,6 +172,34 @@ final class CallInfoImpl implements CallInfo {
         if (!isInvokePoint()) {
             throw new IllegalStateException("invoked() is only available in hooks at INVOKE or AFTER_INVOKE; "
                     + "this hook runs at " + at);
+        }
+        return invoked;
+    }
+
+    @Override
+    public List<String> localNames() {
+        return current.locals ? requirePoint("localNames()").localNames() : List.of();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T local(String name) {
+        return (T) requirePoint("local()").local(name);
+    }
+
+    @Override
+    public void setLocal(String name, Object value) {
+        requirePoint("setLocal()").setLocal(name, value);
+    }
+
+    private InvokedCallImpl requirePoint(String what) {
+        if (!isInvokePoint()) {
+            throw new IllegalStateException(what + " is only available at points inside a method "
+                    + "(INVOKE, AFTER_INVOKE, FIELD_READ, FIELD_WRITE); this hook runs at " + at);
+        }
+        if (!current.locals) {
+            throw new IllegalStateException("Local variables were not captured for this hook. "
+                    + "Ask for them when installing it (locals = true / withLocals())");
         }
         return invoked;
     }

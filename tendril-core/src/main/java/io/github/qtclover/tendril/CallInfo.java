@@ -1,5 +1,7 @@
 package io.github.qtclover.tendril;
 
+import java.util.List;
+
 /**
  * One invocation of a hooked method, as seen by a {@link Hook}.
  *
@@ -101,4 +103,27 @@ public interface CallInfo {
      * @throws IllegalStateException at {@link At#HEAD} and {@link At#RETURN}
      */
     InvokedCall invoked();
+
+    /**
+     * Names of the surrounding method's local variables (parameters included) that are
+     * in scope at this point. Only at points inside a method, only if the hook was
+     * installed asking for locals, and only if the class was compiled with debug
+     * information; otherwise empty.
+     */
+    List<String> localNames();
+
+    /**
+     * Value of a local variable of the surrounding method at this point. Primitives are boxed.
+     *
+     * @throws IllegalStateException    if locals were not captured for this hook
+     * @throws IllegalArgumentException if no variable of that name is in scope
+     */
+    <T> T local(String name);
+
+    /**
+     * Changes a local variable of the surrounding method, which carries on with the new
+     * value. A value the current statement has already read is not affected: in
+     * {@code total += fee(i)}, {@code total} is read before {@code fee} is called.
+     */
+    void setLocal(String name, Object value);
 }

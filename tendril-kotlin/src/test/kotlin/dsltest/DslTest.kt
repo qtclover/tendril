@@ -36,6 +36,30 @@ class Greeter(private val player: PlayerService) {
     fun welcome(name: String): String = player.greet(name) + " " + player.describe(1) + " " + player.describe(2)
 }
 
+class Report {
+    var created = 0
+
+    init {
+        created = 1
+    }
+
+    fun build(items: List<String>): String {
+        val out = StringBuilder()
+        var length = 0
+        // forEach is inline: the lambda body, and its variables, are part of build().
+        items.forEach { item ->
+            length += item.length
+            out.append(tag(item))
+        }
+        return "$length:$out"
+    }
+
+    private fun tag(text: String): String {
+        if (text.isEmpty()) throw IllegalArgumentException("empty")
+        return "<$text>"
+    }
+}
+
 object Counter {
     fun next(current: Int): Int = current + 1
 }
@@ -164,6 +188,36 @@ class DslTest {
 
         hooks.remove()
         assertEquals("Hello, Ada int 1 int 2", greeter.welcome("Ada"))
+    }
+
+    @Test
+    fun `throw, constructor, field and local hooks`() {
+        assertEquals("3:<a><bc>", Report().build(listOf("a", "bc")))
+
+        val hooks = inject<Report> {
+            constructor {
+                onFieldWrite("created") { it.invoked().setArg(0, 42) }
+            }
+            method("build") {
+                atInvoke("tag", locals = true) { call ->
+                    assertTrue("length" in call.localNames(), call.localNames().toString())
+                    assertTrue("item" in call.localNames(), call.localNames().toString())
+                    if (call.local<String>("item") == "bc") call.setLocal("length", 100)
+                }
+            }
+            method("tag") {
+                atThrow { it.result = "<?>" }
+            }
+        }
+
+        val report = Report()
+        assertEquals(42, report.created)
+        assertEquals("100:<a><bc>", report.build(listOf("a", "bc")))
+        assertEquals("1:<a><?>", report.build(listOf("a", "")))
+
+        hooks.remove()
+        assertEquals("3:<a><bc>", Report().build(listOf("a", "bc")))
+        assertFailsWith<IllegalArgumentException> { report.build(listOf("")) }
     }
 
     @Test

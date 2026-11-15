@@ -147,7 +147,7 @@ final class ClassPlan {
                 }
                 fill(point);
                 wrapped.put(index, point);
-                nowWoven.add(pointKey);
+                nowWoven.add(pointKey + (point.captureLocals ? "+locals" : ""));
             }
             result.put(key, new Weave(site, wrapped, method.getValue().size()));
         }
@@ -209,6 +209,30 @@ final class ClassPlan {
         return result;
     }
 
+    private boolean wantsLocals(String key, int index) {
+        for (InjectionImpl injection : injections) {
+            if (injection.locals && callIndices(injection, key).contains(index)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A place where {@code injection} wants local variables but the class file does not name them; else null. */
+    synchronized String localsUnavailable(InjectionImpl injection) {
+        if (!injection.locals || methods == null) {
+            return null;
+        }
+        for (Map.Entry<String, List<CallRef>> method : methods.entrySet()) {
+            for (int index : callIndices(injection, method.getKey())) {
+                if (method.getValue().get(index).locals() == null) {
+                    return method.getKey();
+                }
+            }
+        }
+        return null;
+    }
+
     private Set<String> wanted() {
         Set<String> result = new HashSet<>();
         for (String key : methods.keySet()) {
@@ -217,7 +241,7 @@ final class ClassPlan {
                 result.add(key);
             }
             for (int index : calls) {
-                result.add(key + "#" + index);
+                result.add(key + "#" + index + (wantsLocals(key, index) ? "+locals" : ""));
             }
         }
         return result;
@@ -273,6 +297,14 @@ final class ClassPlan {
                 (Points.runsBefore(injection.at) ? before : after).add(injection);
             }
         }
+        boolean capture = false;
+        for (InjectionImpl injection : before) {
+            capture |= injection.locals;
+        }
+        for (InjectionImpl injection : after) {
+            capture |= injection.locals;
+        }
+        point.captureLocals = capture;
         point.before = before.toArray(Site.NONE);
         point.after = after.toArray(Site.NONE);
     }

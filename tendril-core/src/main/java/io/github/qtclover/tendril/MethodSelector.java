@@ -6,11 +6,27 @@ public final class MethodSelector {
     private final String className;
     private final String methodName;
     private final String descriptor;
+    private final boolean locals;
 
     MethodSelector(String className, String methodName, String descriptor) {
+        this(className, methodName, descriptor, false);
+    }
+
+    private MethodSelector(String className, String methodName, String descriptor, boolean locals) {
         this.className = className;
         this.methodName = methodName;
         this.descriptor = descriptor;
+        this.locals = locals;
+    }
+
+    /**
+     * Makes the invoke and field hooks installed from here on capture the method's
+     * local variables, so they can use {@link CallInfo#local} and {@link CallInfo#setLocal}.
+     * Needs a class compiled with debug information ({@code javac -g}, the default in
+     * Gradle and Maven).
+     */
+    public MethodSelector withLocals() {
+        return new MethodSelector(className, methodName, descriptor, true);
     }
 
     /** Runs {@code hook} before the method body. */
@@ -40,7 +56,7 @@ public final class MethodSelector {
 
     /** Like {@link #atInvoke(String, Hook)}, for only the {@code ordinal}-th matching call (from 0). */
     public Injection atInvoke(String call, int ordinal, Hook hook) {
-        return Injector.batch().add(className, methodName, descriptor, At.INVOKE, call, ordinal, hook).install();
+        return Injector.batch().add(className, methodName, descriptor, At.INVOKE, call, ordinal, locals, hook).install();
     }
 
     /** Runs {@code hook} just after every call to {@code call} inside the method returns. */
@@ -50,7 +66,7 @@ public final class MethodSelector {
 
     /** Like {@link #afterInvoke(String, Hook)}, for only the {@code ordinal}-th matching call (from 0). */
     public Injection afterInvoke(String call, int ordinal, Hook hook) {
-        return Injector.batch().add(className, methodName, descriptor, At.AFTER_INVOKE, call, ordinal, hook)
+        return Injector.batch().add(className, methodName, descriptor, At.AFTER_INVOKE, call, ordinal, locals, hook)
                 .install();
     }
 
@@ -60,7 +76,7 @@ public final class MethodSelector {
      * {@code setResult} replaces it.
      */
     public Injection onFieldRead(String field, Hook hook) {
-        return Injector.batch().add(className, methodName, descriptor, At.FIELD_READ, field, -1, hook).install();
+        return Injector.batch().add(className, methodName, descriptor, At.FIELD_READ, field, -1, locals, hook).install();
     }
 
     /**
@@ -69,7 +85,7 @@ public final class MethodSelector {
      * changes it and {@code skip()} drops the write.
      */
     public Injection onFieldWrite(String field, Hook hook) {
-        return Injector.batch().add(className, methodName, descriptor, At.FIELD_WRITE, field, -1, hook).install();
+        return Injector.batch().add(className, methodName, descriptor, At.FIELD_WRITE, field, -1, locals, hook).install();
     }
 
     /** For {@link At#HEAD}, {@link At#RETURN} and {@link At#THROW}; invoke points need a call, see {@link #atInvoke}. */

@@ -27,7 +27,7 @@ public final class InjectionBatch {
      * @param descriptor full or parameter-only JVM descriptor, or null for every overload
      */
     public InjectionBatch add(String className, String methodName, String descriptor, At at, Hook hook) {
-        return add(className, methodName, descriptor, at, null, -1, hook);
+        return add(className, methodName, descriptor, at, null, -1, false, hook);
     }
 
     /**
@@ -42,6 +42,18 @@ public final class InjectionBatch {
      */
     public InjectionBatch add(String className, String methodName, String descriptor, At at,
                               String invoke, int ordinal, Hook hook) {
+        return add(className, methodName, descriptor, at, invoke, ordinal, false, hook);
+    }
+
+    /**
+     * Like {@link #add(String, String, String, At, String, int, Hook)}.
+     *
+     * @param locals whether the hook may read and change the local variables of the
+     *               surrounding method through {@link CallInfo#local}. Needs a class
+     *               compiled with debug information.
+     */
+    public InjectionBatch add(String className, String methodName, String descriptor, At at,
+                              String invoke, int ordinal, boolean locals, Hook hook) {
         Objects.requireNonNull(className, "className");
         Objects.requireNonNull(methodName, "methodName");
         Objects.requireNonNull(at, "at");
@@ -57,6 +69,10 @@ public final class InjectionBatch {
                     ? "A hook at " + at + " must say which call or field it is for, e.g. \"PricingService.priceOf\""
                     : "A call or field selector (\"" + invoke + "\") makes no sense at " + at);
         }
+        if (locals && !invokePoint) {
+            throw new InjectionException("Local variables can only be captured at points inside a method, not at "
+                    + at);
+        }
         CallSelector selector = switch (at) {
             case HEAD, RETURN, THROW -> null;
             case INVOKE, AFTER_INVOKE -> CallSelector.parse(invoke);
@@ -64,7 +80,7 @@ public final class InjectionBatch {
             case FIELD_WRITE -> CallSelector.parseField(invoke, true);
         };
         pending.add(new InjectionImpl(className.replace('.', '/'), methodName, normalised, at,
-                selector, ordinal, hook));
+                selector, ordinal, locals, hook));
         return this;
     }
 

@@ -124,7 +124,7 @@ final class Dispatcher implements Bridge.Handler {
     }
 
     @Override
-    public Object beforeCall(Object context, int pointId, Object receiver, Object[] args) {
+    public Object beforeCall(Object context, int pointId, Object receiver, Object[] args, Object[] locals) {
         InvokePoint point = registry.point(pointId);
         if (point == null) {
             return null;
@@ -134,7 +134,7 @@ final class Dispatcher implements Bridge.Handler {
             return null;
         }
         CallInfoImpl call = (CallInfoImpl) context;
-        InvokedCallImpl invoked = new InvokedCallImpl(point, call.owner(), receiver, args);
+        InvokedCallImpl invoked = new InvokedCallImpl(point, call.owner(), receiver, args, locals);
         if (hooks.length > 0) {
             call.at = At.INVOKE;
             call.invoked = invoked;
@@ -182,6 +182,7 @@ final class Dispatcher implements Bridge.Handler {
                     continue;
                 }
                 call.at = injection.at;
+                call.current = injection;
                 injection.hook.handle(call);
                 if (mode == STOP_ON_CANCEL && call.cancelled) {
                     break;

@@ -120,30 +120,31 @@ public class MethodScope internal constructor(
      * ```
      *
      * @param ordinal which of the matching calls, counted from 0; every one by default
+     * @param locals  capture the method's local variables, for `local("name")` and `setLocal`
      */
-    public fun atInvoke(call: String, ordinal: Int = -1, hook: (CallInfo) -> Unit) {
-        batch.add(className, methodName, descriptor, At.INVOKE, call, ordinal, Hook(hook))
+    public fun atInvoke(call: String, ordinal: Int = -1, locals: Boolean = false, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.INVOKE, call, ordinal, locals, Hook(hook))
     }
 
     /** Runs [hook] just after a call inside the method returns; it can read and replace the result. */
-    public fun afterInvoke(call: String, ordinal: Int = -1, hook: (CallInfo) -> Unit) {
-        batch.add(className, methodName, descriptor, At.AFTER_INVOKE, call, ordinal, Hook(hook))
+    public fun afterInvoke(call: String, ordinal: Int = -1, locals: Boolean = false, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.AFTER_INVOKE, call, ordinal, locals, Hook(hook))
     }
 
     /**
      * Runs [hook] just after the method reads [field] (`"name"` or `"Owner.name"`).
      * `invoked().result` is the value read; assign it to substitute another.
      */
-    public fun onFieldRead(field: String, hook: (CallInfo) -> Unit) {
-        batch.add(className, methodName, descriptor, At.FIELD_READ, field, -1, Hook(hook))
+    public fun onFieldRead(field: String, locals: Boolean = false, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.FIELD_READ, field, -1, locals, Hook(hook))
     }
 
     /**
      * Runs [hook] just before the method writes [field]. `invoked().arg(0)` is the
      * value about to be written; `setArg(0, v)` changes it and `skip()` drops the write.
      */
-    public fun onFieldWrite(field: String, hook: (CallInfo) -> Unit) {
-        batch.add(className, methodName, descriptor, At.FIELD_WRITE, field, -1, Hook(hook))
+    public fun onFieldWrite(field: String, locals: Boolean = false, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.FIELD_WRITE, field, -1, locals, Hook(hook))
     }
 }
 

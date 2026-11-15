@@ -30,7 +30,7 @@ public final class AnnotationScanner {
                 }
                 found++;
                 batch.add(targetName(inject, method), inject.method(), inject.descriptor(), inject.at(),
-                        inject.invoke().isEmpty() ? null : inject.invoke(), inject.ordinal(),
+                        inject.invoke().isEmpty() ? null : inject.invoke(), inject.ordinal(), inject.locals(),
                         toHook(method, instance));
             }
         }

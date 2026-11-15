@@ -1,12 +1,16 @@
 package io.github.qtclover.tendril.internal;
 
+import java.util.List;
+
 /**
  * An instruction inside a method body that a hook can be attached to.
  *
+ * @param locals   the named local variables in scope at the instruction, or null if the
+ *                 class was compiled without that debug information
  * @param hookable false for instructions that are seen but cannot be wrapped, such as
  *                 anything a constructor does before its {@code super(...)} call returns
  */
-record CallRef(Kind kind, String owner, String name, String desc, boolean hookable) {
+record CallRef(Kind kind, String owner, String name, String desc, boolean hookable, List<LocalRef> locals) {
 
     enum Kind {
         /** A method call. */

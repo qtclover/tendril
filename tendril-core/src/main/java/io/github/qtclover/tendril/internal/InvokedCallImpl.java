@@ -2,6 +2,9 @@ package io.github.qtclover.tendril.internal;
 
 import io.github.qtclover.tendril.InvokedCall;
 
+import java.util.ArrayList;
+import java.util.List;
+
 final class InvokedCallImpl implements InvokedCall {
 
     final InvokePoint point;
@@ -17,7 +20,11 @@ final class InvokedCallImpl implements InvokedCall {
     boolean skipped;
     Object result;
 
-    InvokedCallImpl(InvokePoint point, Class<?> caller, Object receiver, Object[] args) {
+    /** Boxed local variables of the surrounding method, copied back by the woven code; null if not captured. */
+    private final Object[] locals;
+
+    InvokedCallImpl(InvokePoint point, Class<?> caller, Object receiver, Object[] args, Object[] locals) {
+        this.locals = locals;
         this.point = point;
         this.caller = caller;
         this.receiver = receiver;
@@ -112,6 +119,46 @@ final class InvokedCallImpl implements InvokedCall {
         if (!after) {
             skipped = true;
         }
+    }
+
+    // ---- local variables of the surrounding method -------------------------
+
+    List<String> localNames() {
+        List<String> names = new ArrayList<>();
+        if (locals != null) {
+            for (LocalRef local : point.call.locals()) {
+                names.add(local.name());
+            }
+        }
+        return names;
+    }
+
+    Object local(String name) {
+        return locals[localIndex(name)];
+    }
+
+    void setLocal(String name, Object value) {
+        int index = localIndex(name);
+        LocalRef local = point.call.locals().get(index);
+        locals[index] = Values.fit(value, "(" + local.desc() + ")V", 0, caller, "local variable " + name,
+                point.site.name + point.site.desc);
+    }
+
+    private int localIndex(String name) {
+        if (locals == null) {
+            throw new IllegalStateException("Local variables were not captured for this hook. "
+                    + "Ask for them when installing it (locals = true / withLocals())"
+                    + (point.call.locals() == null ? "; note that this class has no local variable table" : ""));
+        }
+        List<LocalRef> refs = point.call.locals();
+        // Innermost scope wins if a name is declared more than once.
+        for (int i = refs.size() - 1; i >= 0; i--) {
+            if (refs.get(i).name().equals(name)) {
+                return i;
+            }
+        }
+        throw new IllegalArgumentException("No local variable \"" + name + "\" in scope here. In scope: "
+                + localNames());
     }
 
     private String label() {

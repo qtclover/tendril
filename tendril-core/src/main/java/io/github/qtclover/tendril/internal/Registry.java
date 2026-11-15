@@ -123,6 +123,12 @@ public final class Registry implements ClassFileTransformer {
                     if (Boolean.FALSE.equals(plan.matchesAnything(injection))) {
                         throw new InjectionException(plan.explainNoMatch(injection));
                     }
+                    String noNames = plan.localsUnavailable(injection);
+                    if (noNames != null) {
+                        throw new InjectionException("Local variables were requested in " + injection.describe()
+                                + ", but " + noNames + " has no local variable table. "
+                                + "Compile the class with debug information (javac -g).");
+                    }
                 }
             }
         } catch (RuntimeException | Error e) {

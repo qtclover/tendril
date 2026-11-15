@@ -11,6 +11,8 @@ final class InvokePoint {
 
     volatile InjectionImpl[] before = Site.NONE;
     volatile InjectionImpl[] after = Site.NONE;
+    /** Whether any hook here asked for the local variables. Part of the woven code, not just a table. */
+    volatile boolean captureLocals;
 
     InvokePoint(int id, Site site, int index, CallRef call) {
         this.id = id;

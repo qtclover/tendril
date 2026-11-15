@@ -34,9 +34,11 @@ public final class Bridge {
 
         /**
          * Runs the hooks placed before a call inside a hooked method. Returns an opaque
-         * per-call-site context, or null when nothing is hooked there.
+         * per-call-site context, or null when nothing is hooked there. {@code locals}
+         * holds the boxed local variables in scope if a hook asked for them, else null;
+         * the woven code copies the array back into the variables afterwards.
          */
-        Object beforeCall(Object context, int point, Object receiver, Object[] args);
+        Object beforeCall(Object context, int point, Object receiver, Object[] args, Object[] locals);
 
         /** True when a hook asked for the call not to be made. */
         boolean skipped(Object callContext);
@@ -58,7 +60,7 @@ public final class Bridge {
      * Bumped whenever this class changes shape, so that the core can refuse to work
      * with an agent jar from a different release instead of failing inside woven code.
      */
-    public static final int VERSION = 3;
+    public static final int VERSION = 4;
 
     /** Set once by {@link Agent}. */
     public static volatile Instrumentation instrumentation;
@@ -109,12 +111,13 @@ public final class Bridge {
         return h == null ? throwable : h.thrown(context, throwable);
     }
 
-    public static Object beforeCall(Object context, int point, Object receiver, Object[] args) {
+    public static Object beforeCall(Object context, int point, Object receiver, Object[] args,
+                                    Object[] locals) {
         if (context == null) {
             return null;
         }
         Handler h = handler;
-        return h == null ? null : h.beforeCall(context, point, receiver, args);
+        return h == null ? null : h.beforeCall(context, point, receiver, args, locals);
     }
 
     public static boolean skipped(Object callContext) {
