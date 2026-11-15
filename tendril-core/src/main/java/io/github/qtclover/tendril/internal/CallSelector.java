@@ -25,6 +25,21 @@ public final class CallSelector {
         this.descriptor = descriptor;
     }
 
+    /** For {@link io.github.qtclover.tendril.At#FIELD_READ} and FIELD_WRITE: {@code name} or {@code Owner.name}. */
+    public static CallSelector parseField(String text, boolean write) {
+        String trimmed = text == null ? "" : text.trim();
+        String head = trimmed.replace('/', '.').replace('#', '.');
+        int dot = head.lastIndexOf('.');
+        String owner = dot < 0 ? null : head.substring(0, dot);
+        String name = head.substring(dot + 1);
+        if (name.isEmpty() || (owner != null && owner.isEmpty()) || head.indexOf('(') >= 0) {
+            throw new InjectionException("Not a field selector: \"" + text
+                    + "\" (expected \"name\" or \"Owner.name\")");
+        }
+        return new CallSelector(trimmed, write ? CallRef.Kind.FIELD_WRITE : CallRef.Kind.FIELD_READ,
+                owner, name, null);
+    }
+
     public static CallSelector parse(String text) {
         String trimmed = text == null ? "" : text.trim();
         String rest = trimmed;

@@ -181,6 +181,7 @@ final class Dispatcher implements Bridge.Handler {
                 if (!injection.active) {
                     continue;
                 }
+                call.at = injection.at;
                 injection.hook.handle(call);
                 if (mode == STOP_ON_CANCEL && call.cancelled) {
                     break;

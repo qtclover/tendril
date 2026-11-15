@@ -11,6 +11,7 @@ import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.commons.Method;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
@@ -118,6 +119,10 @@ final class Weaver {
                     next = next.getNext();
                 }
                 pendingNew.push(next != null && next.getOpcode() == Opcodes.DUP);
+            } else if (insn instanceof FieldInsnNode field) {
+                boolean read = field.getOpcode() == Opcodes.GETFIELD || field.getOpcode() == Opcodes.GETSTATIC;
+                found.add(new CallRef(read ? CallRef.Kind.FIELD_READ : CallRef.Kind.FIELD_WRITE, field.owner,
+                        field.name, read ? "()" + field.desc : "(" + field.desc + ")V", ready));
             } else if (insn instanceof MethodInsnNode call) {
                 if (!call.name.equals("<init>")) {
                     found.add(new CallRef(CallRef.Kind.CALL, call.owner, call.name, call.desc, ready));
@@ -310,6 +315,23 @@ final class Weaver {
             boolean hasReceiver = opcode != INVOKESTATIC && !isNew;
             wrap(point, hasReceiver ? Type.getObjectType(calleeOwner) : null, parameters, result, isNew,
                     () -> mv.visitMethodInsn(opcode, calleeOwner, name, desc, isInterface));
+        }
+
+        @Override
+        public void visitFieldInsn(int opcode, String fieldOwner, String name, String desc) {
+            InvokePoint point = points.get(callIndex++);
+            if (point == null || bodyStart == null) {
+                super.visitFieldInsn(opcode, fieldOwner, name, desc);
+                return;
+            }
+            // A read is wrapped like a call with no arguments that returns the value,
+            // a write like a call that takes the value and returns nothing.
+            boolean read = opcode == GETFIELD || opcode == GETSTATIC;
+            boolean isStatic = opcode == GETSTATIC || opcode == PUTSTATIC;
+            Type type = Type.getType(desc);
+            wrap(point, isStatic ? null : Type.getObjectType(fieldOwner),
+                    read ? new Type[0] : new Type[] {type}, read ? type : Type.VOID_TYPE, false,
+                    () -> mv.visitFieldInsn(opcode, fieldOwner, name, desc));
         }
 
         /**

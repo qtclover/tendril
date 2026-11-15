@@ -35,7 +35,9 @@ public final class InjectionBatch {
      * {@link At#AFTER_INVOKE}.
      *
      * @param invoke  which calls inside the method: {@code "name"}, {@code "Owner.name"}, or
-     *                either followed by a full or parameter-only descriptor
+     *                either followed by a full or parameter-only descriptor; {@code "new Owner"}
+     *                for constructor calls; for the field points, {@code "field"} or
+     *                {@code "Owner.field"}
      * @param ordinal which of the matching calls in each method, counted from 0; negative for all
      */
     public InjectionBatch add(String className, String methodName, String descriptor, At at,
@@ -52,10 +54,15 @@ public final class InjectionBatch {
         boolean hasSelector = invoke != null && !invoke.isBlank();
         if (invokePoint != hasSelector) {
             throw new InjectionException(invokePoint
-                    ? "A hook at " + at + " must say which call it is for, e.g. \"PricingService.priceOf\""
-                    : "A call selector (\"" + invoke + "\") only makes sense at INVOKE or AFTER_INVOKE, not " + at);
+                    ? "A hook at " + at + " must say which call or field it is for, e.g. \"PricingService.priceOf\""
+                    : "A call or field selector (\"" + invoke + "\") makes no sense at " + at);
         }
-        CallSelector selector = invokePoint ? CallSelector.parse(invoke) : null;
+        CallSelector selector = switch (at) {
+            case HEAD, RETURN, THROW -> null;
+            case INVOKE, AFTER_INVOKE -> CallSelector.parse(invoke);
+            case FIELD_READ -> CallSelector.parseField(invoke, false);
+            case FIELD_WRITE -> CallSelector.parseField(invoke, true);
+        };
         pending.add(new InjectionImpl(className.replace('.', '/'), methodName, normalised, at,
                 selector, ordinal, hook));
         return this;

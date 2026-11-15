@@ -129,6 +129,22 @@ public class MethodScope internal constructor(
     public fun afterInvoke(call: String, ordinal: Int = -1, hook: (CallInfo) -> Unit) {
         batch.add(className, methodName, descriptor, At.AFTER_INVOKE, call, ordinal, Hook(hook))
     }
+
+    /**
+     * Runs [hook] just after the method reads [field] (`"name"` or `"Owner.name"`).
+     * `invoked().result` is the value read; assign it to substitute another.
+     */
+    public fun onFieldRead(field: String, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.FIELD_READ, field, -1, Hook(hook))
+    }
+
+    /**
+     * Runs [hook] just before the method writes [field]. `invoked().arg(0)` is the
+     * value about to be written; `setArg(0, v)` changes it and `skip()` drops the write.
+     */
+    public fun onFieldWrite(field: String, hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.FIELD_WRITE, field, -1, Hook(hook))
+    }
 }
 
 /** The return value, cast: `call.resultAs<String>()`. */

@@ -11,15 +11,15 @@ public final class Points {
     public static boolean isInsideMethod(At at) {
         return switch (at) {
             case HEAD, RETURN, THROW -> false;
-            case INVOKE, AFTER_INVOKE -> true;
+            case INVOKE, AFTER_INVOKE, FIELD_READ, FIELD_WRITE -> true;
         };
     }
 
     /** For points inside a method: whether hooks run before the instruction (true) or after it. */
     static boolean runsBefore(At at) {
         return switch (at) {
-            case INVOKE -> true;
-            case AFTER_INVOKE -> false;
+            case INVOKE, FIELD_WRITE -> true;
+            case AFTER_INVOKE, FIELD_READ -> false;
             case HEAD, RETURN, THROW -> throw new IllegalStateException("not a point inside a method: " + at);
         };
     }

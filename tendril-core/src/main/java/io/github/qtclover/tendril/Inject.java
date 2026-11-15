@@ -39,7 +39,9 @@ public @interface Inject {
 
     /**
      * For {@link At#INVOKE} and {@link At#AFTER_INVOKE}: the call inside the method to
-     * hook, as {@code "name"}, {@code "Owner.name"}, or either followed by a descriptor.
+     * hook, as {@code "name"}, {@code "Owner.name"}, or either followed by a descriptor,
+     * or {@code "new Owner"} for a constructor call. For {@link At#FIELD_READ} and
+     * {@link At#FIELD_WRITE}: the field, as {@code "name"} or {@code "Owner.name"}.
      */
     String invoke() default "";
 

@@ -54,6 +54,24 @@ public final class MethodSelector {
                 .install();
     }
 
+    /**
+     * Runs {@code hook} just after the method reads {@code field} ({@code "name"} or
+     * {@code "Owner.name"}). {@code call.invoked().getResult()} is the value read and
+     * {@code setResult} replaces it.
+     */
+    public Injection onFieldRead(String field, Hook hook) {
+        return Injector.batch().add(className, methodName, descriptor, At.FIELD_READ, field, -1, hook).install();
+    }
+
+    /**
+     * Runs {@code hook} just before the method writes {@code field}.
+     * {@code call.invoked().arg(0)} is the value about to be written; {@code setArg(0, v)}
+     * changes it and {@code skip()} drops the write.
+     */
+    public Injection onFieldWrite(String field, Hook hook) {
+        return Injector.batch().add(className, methodName, descriptor, At.FIELD_WRITE, field, -1, hook).install();
+    }
+
     /** For {@link At#HEAD}, {@link At#RETURN} and {@link At#THROW}; invoke points need a call, see {@link #atInvoke}. */
     public Injection at(At at, Hook hook) {
         return Injector.batch().add(className, methodName, descriptor, at, hook).install();

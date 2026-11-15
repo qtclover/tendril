@@ -21,5 +21,15 @@ public enum At {
      * Just after a particular method call inside the target method returns normally.
      * The hook can read and replace the call's result. See {@link InvokedCall}.
      */
-    AFTER_INVOKE
+    AFTER_INVOKE,
+    /**
+     * Just after a particular field is read inside the target method. The hook can
+     * see and replace the value that was read. See {@link InvokedCall}.
+     */
+    FIELD_READ,
+    /**
+     * Just before a particular field is written inside the target method. The hook
+     * can see and change the value, or skip the write. See {@link InvokedCall}.
+     */
+    FIELD_WRITE
 }

@@ -12,7 +12,11 @@ record CallRef(Kind kind, String owner, String name, String desc, boolean hookab
         /** A method call. */
         CALL,
         /** A constructor call that is part of a {@code new} expression. */
-        NEW
+        NEW,
+        /** A field read. Described as a call with no arguments that returns the value: {@code ()T}. */
+        FIELD_READ,
+        /** A field write. Described as a call with the new value as its only argument: {@code (T)V}. */
+        FIELD_WRITE
     }
 
     String describe() {
@@ -20,6 +24,7 @@ record CallRef(Kind kind, String owner, String name, String desc, boolean hookab
         return switch (kind) {
             case CALL -> dotted + "." + name + desc;
             case NEW -> "new " + dotted + desc.substring(0, desc.lastIndexOf(')') + 1);
+            case FIELD_READ, FIELD_WRITE -> dotted + "." + name;
         };
     }
 

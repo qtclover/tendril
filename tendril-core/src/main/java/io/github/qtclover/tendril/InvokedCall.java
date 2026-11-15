@@ -10,6 +10,11 @@ package io.github.qtclover.tendril;
  *
  * <p>A {@code new Foo(a, b)} expression is treated as a call named {@code <init>}
  * with no receiver, whose result is the new object.
+ *
+ * <p>Field accesses use the same shape. Reading {@code player.health} is a call
+ * named {@code health} on {@code player} with no arguments, whose result is the
+ * value read. Writing {@code player.health = v} is a call with the single argument
+ * {@code v} and no result; skipping it leaves the field as it was.
  */
 public interface InvokedCall {
 
