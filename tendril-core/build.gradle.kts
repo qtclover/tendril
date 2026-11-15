@@ -57,11 +57,29 @@ val agentTest = tasks.register<Test>("agentTest") {
     systemProperty("tendril.test.expectPremain", "true")
 }
 
-tasks.check {
-    dependsOn(agentTest)
+// And once more with a hook class named in the agent arguments, so that it is
+// registered before main() without the application doing anything.
+val agentArgsTest = tasks.register<Test>("agentArgsTest") {
+    description = "Runs AgentArgumentsTest with -javaagent=<hook class>."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    jvmArgumentProviders.add(AgentArgument(agentJar, "io.github.qtclover.tendril.fixtures.PremainHooks"))
+    systemProperty("tendril.test.agentArgs", "true")
+    filter {
+        includeTestsMatching("*.AgentArgumentsTest")
+    }
 }
 
-class AgentArgument(@get:InputFiles @get:PathSensitive(PathSensitivity.NONE) val jar: FileCollection) :
-    CommandLineArgumentProvider {
-    override fun asArguments() = listOf("-javaagent:${jar.singleFile.absolutePath}")
+tasks.check {
+    dependsOn(agentTest, agentArgsTest)
+}
+
+class AgentArgument(
+    @get:InputFiles @get:PathSensitive(PathSensitivity.NONE) val jar: FileCollection,
+    @get:Input val hookClasses: String = "",
+) : CommandLineArgumentProvider {
+    override fun asArguments() = listOf(
+        "-javaagent:${jar.singleFile.absolutePath}" + if (hookClasses.isEmpty()) "" else "=$hookClasses"
+    )
 }

@@ -1,5 +1,6 @@
 package io.github.qtclover.tendril;
 
+import io.github.qtclover.tendril.internal.AnnotationScanner;
 import io.github.qtclover.tendril.internal.Attacher;
 import io.github.qtclover.tendril.internal.Registry;
 
@@ -62,6 +63,19 @@ public final class Injector {
      */
     public static ClassSelector into(String className) {
         return new ClassSelector(className);
+    }
+
+    /** Installs every static {@link Inject}-annotated method of {@code hooks}. */
+    public static Injection register(Class<?> hooks) {
+        return AnnotationScanner.scan(hooks, null).install();
+    }
+
+    /** Installs every {@link Inject}-annotated method of {@code hooks}, static or not. */
+    public static Injection register(Object hooks) {
+        if (hooks instanceof Class<?> c) {
+            return register(c);
+        }
+        return AnnotationScanner.scan(hooks.getClass(), hooks).install();
     }
 
     /** Starts a batch: several hooks installed, and later removed, as one. */
