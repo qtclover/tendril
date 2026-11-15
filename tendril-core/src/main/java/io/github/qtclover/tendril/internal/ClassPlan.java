@@ -85,6 +85,17 @@ final class ClassPlan {
         return false;
     }
 
+    /** Active injections that match no method of the class as last seen. */
+    synchronized List<InjectionImpl> unmatched() {
+        List<InjectionImpl> result = new ArrayList<>();
+        for (InjectionImpl injection : injections) {
+            if (Boolean.FALSE.equals(matchesAnything(injection))) {
+                result.add(injection);
+            }
+        }
+        return result;
+    }
+
     synchronized Set<String> knownMethods() {
         return methods == null ? Set.of() : Set.copyOf(methods);
     }

@@ -256,6 +256,14 @@ public final class Registry implements ClassFileTransformer {
                 // re-transformation means the original bytes: that is the undo.
                 byte[] result = sitesToWeave.isEmpty() ? null : Weaver.weave(reader, loader, sitesToWeave);
                 if (plan.version() == version) {
+                    if (classBeingRedefined == null) {
+                        // First load: install() could not check the method names
+                        // back then, so a typo would otherwise go unnoticed.
+                        for (InjectionImpl injection : plan.unmatched()) {
+                            System.err.println("[tendril] warning: no hookable method matches "
+                                    + injection.describe() + "; that hook will never run");
+                        }
+                    }
                     return result;
                 }
                 // A hook was added or removed while we were weaving; go again.
