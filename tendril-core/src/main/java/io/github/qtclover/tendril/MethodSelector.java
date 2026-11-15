@@ -88,6 +88,37 @@ public final class MethodSelector {
         return Injector.batch().add(className, methodName, descriptor, At.FIELD_WRITE, field, -1, locals, hook).install();
     }
 
+    /**
+     * Installs the public static method {@code hookMethod} of {@code hookClass} as a
+     * direct hook, see {@link InjectionBatch#addDirect}. The class of this selector
+     * must be loaded, and the overload is chosen by the hook's parameter types.
+     */
+    public Injection direct(At at, Class<?> hookClass, String hookMethod) {
+        Class<?> target = null;
+        for (Class<?> loaded : Injector.instrumentation().getAllLoadedClasses()) {
+            if (loaded.getName().equals(className)) {
+                target = loaded;
+                break;
+            }
+        }
+        if (target == null) {
+            throw new InjectionException("Direct hooks need a class that is already loaded: " + className);
+        }
+        java.lang.reflect.Method found = null;
+        for (java.lang.reflect.Method method : hookClass.getDeclaredMethods()) {
+            if (method.getName().equals(hookMethod)) {
+                if (found != null) {
+                    throw new InjectionException(hookClass.getName() + " has several methods named " + hookMethod);
+                }
+                found = method;
+            }
+        }
+        if (found == null) {
+            throw new InjectionException(hookClass.getName() + " has no method named " + hookMethod);
+        }
+        return Injector.batch().addDirect(target, methodName, at, found).install();
+    }
+
     /** For {@link At#HEAD}, {@link At#RETURN} and {@link At#THROW}; invoke points need a call, see {@link #atInvoke}. */
     public Injection at(At at, Hook hook) {
         return Injector.batch().add(className, methodName, descriptor, at, hook).install();

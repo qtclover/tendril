@@ -1,5 +1,7 @@
 package io.github.qtclover.tendril.internal;
 
+import io.github.qtclover.tendril.At;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -14,7 +16,8 @@ import java.util.TreeSet;
 final class ClassPlan {
 
     /** What to weave into one method: its site, and the calls inside it to wrap, by call index. */
-    record Weave(Site site, Map<Integer, InvokePoint> points, int instructionCount) {
+    record Weave(Site site, Map<Integer, InvokePoint> points, int instructionCount,
+                 List<DirectHook> directHead, List<DirectHook> directReturn) {
     }
 
     final String internalName;
@@ -149,7 +152,15 @@ final class ClassPlan {
                 wrapped.put(index, point);
                 nowWoven.add(pointKey + (point.captureLocals ? "+locals" : ""));
             }
-            result.put(key, new Weave(site, wrapped, method.getValue().size()));
+            List<DirectHook> directHead = new ArrayList<>();
+            List<DirectHook> directReturn = new ArrayList<>();
+            for (InjectionImpl injection : injections) {
+                if (injection.direct != null && matchesMethod(injection, key)) {
+                    (injection.at == At.HEAD ? directHead : directReturn).add(injection.direct);
+                }
+            }
+            nowWoven.addAll(directKeys(key));
+            result.put(key, new Weave(site, wrapped, method.getValue().size(), directHead, directReturn));
         }
         woven = nowWoven;
         return result;
@@ -233,12 +244,25 @@ final class ClassPlan {
         return null;
     }
 
+    /** Direct hooks are part of the bytecode, so each one is part of the woven state. */
+    private Set<String> directKeys(String key) {
+        Set<String> result = new HashSet<>();
+        int position = 0;
+        for (InjectionImpl injection : injections) {
+            if (injection.direct != null && matchesMethod(injection, key)) {
+                result.add(key + "@" + injection.at + ":" + position++ + ":" + injection.direct.key());
+            }
+        }
+        return result;
+    }
+
     private Set<String> wanted() {
         Set<String> result = new HashSet<>();
         for (String key : methods.keySet()) {
             Set<Integer> calls = wantedCalls(key);
             if (!calls.isEmpty() || wantsMethodHooks(key)) {
                 result.add(key);
+                result.addAll(directKeys(key));
             }
             for (int index : calls) {
                 result.add(key + "#" + index + (wantsLocals(key, index) ? "+locals" : ""));
@@ -273,6 +297,8 @@ final class ClassPlan {
                 if (!callIndices(injection, key).isEmpty()) {
                     invokeHooks++;
                 }
+            } else if (injection.direct != null) {
+                continue; // Called straight from the bytecode; nothing to look up at run time.
             } else if (matchesMethod(injection, key)) {
                 switch (injection.at) {
                     case HEAD -> head.add(injection);

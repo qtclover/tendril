@@ -45,6 +45,20 @@ public @interface Inject {
     At at() default At.HEAD;
 
     /**
+     * Makes this a direct hook: instead of a {@link CallInfo}, the method takes the
+     * receiver (unless the target is static), the target's parameters and, at
+     * {@link At#RETURN}, its result, and is called straight from the target with no
+     * boxing. It must be {@code public static void} in a public class that the target
+     * can see, needs {@link #target()} rather than a name, and can only observe.
+     *
+     * <pre>{@code
+     * @Inject(target = PlayerService.class, method = "damage", direct = true)
+     * public static void onDamage(PlayerService self, int amount) { ... }
+     * }</pre>
+     */
+    boolean direct() default false;
+
+    /**
      * For {@link At#INVOKE} and {@link At#AFTER_INVOKE}: the call inside the method to
      * hook, as {@code "name"}, {@code "Owner.name"}, or either followed by a descriptor,
      * or {@code "new Owner"} for a constructor call. For {@link At#FIELD_READ} and

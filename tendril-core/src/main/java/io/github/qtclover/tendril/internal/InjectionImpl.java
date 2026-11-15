@@ -21,6 +21,8 @@ public final class InjectionImpl {
     /** Whether the hook wants the local variables in scope at its point. */
     final boolean locals;
     final Hook hook;
+    /** For a direct hook: the static method to call. Then {@link #hook} is null. */
+    final DirectHook direct;
     /** For a pattern hook: which classes it applies to. Null for a hook on one named class. */
     final TypeMatcher scope;
     /** For the copy of a pattern hook made for one matching class: the pattern hook. */
@@ -35,8 +37,21 @@ public final class InjectionImpl {
                 invoke, ordinal, locals, hook);
     }
 
+    /** A direct hook on one method of one class. */
+    public InjectionImpl(String className, String methodName, At at, DirectHook direct) {
+        this(className.replace('.', '/'), null, null, methodName, direct.targetDescriptor(), at, null, -1,
+                false, null, direct);
+    }
+
     private InjectionImpl(String classInternalName, TypeMatcher scope, InjectionImpl template, String methodName,
                           String descriptor, At at, CallSelector invoke, int ordinal, boolean locals, Hook hook) {
+        this(classInternalName, scope, template, methodName, descriptor, at, invoke, ordinal, locals, hook, null);
+    }
+
+    private InjectionImpl(String classInternalName, TypeMatcher scope, InjectionImpl template, String methodName,
+                          String descriptor, At at, CallSelector invoke, int ordinal, boolean locals, Hook hook,
+                          DirectHook direct) {
+        this.direct = direct;
         this.scope = scope;
         this.template = template;
         this.classInternalName = classInternalName;

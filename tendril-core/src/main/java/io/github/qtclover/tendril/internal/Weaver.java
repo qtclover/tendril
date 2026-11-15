@@ -220,6 +220,8 @@ final class Weaver {
         private final Map<Integer, InvokePoint> points;
         private int contextLocal;
         private final int instructionCount;
+        private final List<DirectHook> directHead;
+        private final List<DirectHook> directReturn;
         private int callIndex;
         private Label bodyStart;
 
@@ -228,6 +230,8 @@ final class Weaver {
             this.siteId = weave.site().id;
             this.points = weave.points();
             this.instructionCount = weave.instructionCount();
+            this.directHead = weave.directHead();
+            this.directReturn = weave.directReturn();
             this.owner = owner;
             this.isStatic = (access & Opcodes.ACC_STATIC) != 0;
             this.returnType = Type.getReturnType(desc);
@@ -283,6 +287,15 @@ final class Weaver {
                 storeArg(i);
             }
 
+            // Direct hooks: Hooks.onDamage(this, amount); a plain static call.
+            for (DirectHook hook : directHead) {
+                if (!isStatic) {
+                    loadThis();
+                }
+                loadArgs();
+                mv.visitMethodInsn(INVOKESTATIC, hook.owner(), hook.name(), hook.descriptor(), false);
+            }
+
             // Everything from here on is covered by the catch-all added in visitMaxs.
             bodyStart = mark();
         }
@@ -325,6 +338,27 @@ final class Weaver {
         protected void onMethodExit(int opcode) {
             if (opcode == ATHROW) {
                 return;
+            }
+            // Direct hooks: Hooks.onDamage(this, amount, result); the result stays on the stack.
+            for (DirectHook hook : directReturn) {
+                int resultLocal = -1;
+                if (opcode != RETURN) {
+                    resultLocal = newLocal(returnType);
+                    if (returnType.getSize() == 2) {
+                        dup2();
+                    } else {
+                        dup();
+                    }
+                    storeLocal(resultLocal);
+                }
+                if (!isStatic) {
+                    loadThis();
+                }
+                loadArgs();
+                if (resultLocal >= 0) {
+                    loadLocal(resultLocal);
+                }
+                mv.visitMethodInsn(INVOKESTATIC, hook.owner(), hook.name(), hook.descriptor(), false);
             }
             if (opcode == RETURN) {
                 // Bridge.exit(ctx, null);

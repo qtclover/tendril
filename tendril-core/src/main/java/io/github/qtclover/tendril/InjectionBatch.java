@@ -2,6 +2,7 @@ package io.github.qtclover.tendril;
 
 import io.github.qtclover.tendril.internal.CallSelector;
 import io.github.qtclover.tendril.internal.Descriptors;
+import io.github.qtclover.tendril.internal.DirectHook;
 import io.github.qtclover.tendril.internal.InjectionImpl;
 import io.github.qtclover.tendril.internal.Points;
 import io.github.qtclover.tendril.internal.Registry;
@@ -89,6 +90,23 @@ public final class InjectionBatch {
 
     public InjectionBatch add(Class<?> target, String methodName, String descriptor, At at, Hook hook) {
         return add(target.getName(), methodName, descriptor, at, hook);
+    }
+
+    /**
+     * Adds a direct hook: {@code hook}, a public static void method, is called straight
+     * from {@code target}'s method with the receiver (unless static), the arguments and,
+     * at {@link At#RETURN}, the result as its own parameters. Nothing is boxed and no
+     * dispatcher is involved, which makes it far cheaper than an ordinary hook; in
+     * exchange it can only observe. Which overload is hooked follows from the hook's
+     * parameter types.
+     *
+     * @param methodName the method to hook, or {@code "<init>"} for constructors
+     */
+    public InjectionBatch addDirect(Class<?> target, String methodName, At at, java.lang.reflect.Method hook) {
+        Objects.requireNonNull(target, "target");
+        pending.add(new InjectionImpl(target.getName(), methodName, at,
+                DirectHook.resolve(target, methodName, at, hook)));
+        return this;
     }
 
     /** Attaches if necessary and installs everything added so far. */

@@ -29,6 +29,14 @@ public final class AnnotationScanner {
                     continue;
                 }
                 found++;
+                if (inject.direct()) {
+                    if (inject.target() == void.class || inject.subtypes()) {
+                        throw new InjectionException("Direct hook " + describe(method)
+                                + " needs target = X.class, without subtypes");
+                    }
+                    batch.addDirect(inject.target(), inject.method(), inject.at(), method);
+                    continue;
+                }
                 batch.add(targetName(inject, method), inject.method(), inject.descriptor(), inject.at(),
                         inject.invoke().isEmpty() ? null : inject.invoke(), inject.ordinal(), inject.locals(),
                         toHook(method, instance));
