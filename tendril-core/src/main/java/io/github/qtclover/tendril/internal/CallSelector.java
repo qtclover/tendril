@@ -5,18 +5,21 @@ import io.github.qtclover.tendril.InjectionException;
 /**
  * Picks call instructions inside a method. Written as {@code name},
  * {@code Owner.name}, or either followed by a full or parameter-only descriptor:
- * {@code PricingService.priceOf(Ljava/lang/String;I)}.
+ * {@code PricingService.priceOf(Ljava/lang/String;I)}. {@code new Owner} picks
+ * constructor calls.
  */
 public final class CallSelector {
 
     private final String text;
+    private final CallRef.Kind kind;
     /** Dotted; a full binary name or just its last part. Null for any owner. */
     private final String owner;
     private final String name;
     private final String descriptor;
 
-    private CallSelector(String text, String owner, String name, String descriptor) {
+    private CallSelector(String text, CallRef.Kind kind, String owner, String name, String descriptor) {
         this.text = text;
+        this.kind = kind;
         this.owner = owner;
         this.name = name;
         this.descriptor = descriptor;
@@ -24,24 +27,37 @@ public final class CallSelector {
 
     public static CallSelector parse(String text) {
         String trimmed = text == null ? "" : text.trim();
-        int paren = trimmed.indexOf('(');
-        String descriptor = paren < 0 ? null : Descriptors.validate(trimmed.substring(paren));
-        String head = (paren < 0 ? trimmed : trimmed.substring(0, paren)).replace('/', '.').replace('#', '.');
-        int dot = head.lastIndexOf('.');
-        String owner = dot < 0 ? null : head.substring(0, dot);
-        String name = head.substring(dot + 1);
-        if (name.isEmpty() || (owner != null && owner.isEmpty())) {
+        String rest = trimmed;
+        boolean isNew = rest.startsWith("new ");
+        if (isNew) {
+            rest = rest.substring(4).trim();
+        }
+        int paren = rest.indexOf('(');
+        String descriptor = paren < 0 ? null : Descriptors.validate(rest.substring(paren));
+        String head = (paren < 0 ? rest : rest.substring(0, paren)).replace('/', '.').replace('#', '.');
+        String owner;
+        String name;
+        if (isNew) {
+            // "new Foo" or "new Foo(I)"
+            owner = head;
+            name = "<init>";
+        } else {
+            int dot = head.lastIndexOf('.');
+            owner = dot < 0 ? null : head.substring(0, dot);
+            name = head.substring(dot + 1);
+            isNew = name.equals("<init>");   // "Foo.<init>" means the same as "new Foo"
+        }
+        if (name.isEmpty() || (owner != null && owner.isEmpty()) || (isNew && owner == null)
+                || (name.startsWith("<") && !isNew)) {
             throw new InjectionException("Not a call selector: \"" + text
-                    + "\" (expected \"name\", \"Owner.name\" or \"Owner.name(I)V\")");
+                    + "\" (expected \"name\", \"Owner.name\", \"Owner.name(I)V\" or \"new Owner\")");
         }
-        if (name.startsWith("<")) {
-            throw new InjectionException("Constructor calls cannot be hooked (yet): \"" + text + "\"");
-        }
-        return new CallSelector(trimmed, owner, name, descriptor);
+        return new CallSelector(trimmed, isNew ? CallRef.Kind.NEW : CallRef.Kind.CALL, owner, name, descriptor);
     }
 
     boolean matches(CallRef call) {
-        if (!name.equals(call.name()) || !Descriptors.matches(descriptor, call.desc())) {
+        if (!call.hookable() || kind != call.kind() || !name.equals(call.name())
+                || !Descriptors.matches(descriptor, call.desc())) {
             return false;
         }
         if (owner == null) {

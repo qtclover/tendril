@@ -66,6 +66,17 @@ public class ClassScope internal constructor(
     }
 
     /**
+     * The constructors of the class: all of them, or the one with exactly these
+     * [parameters]. Head hooks run right after `super(...)` returns. For the
+     * constructor without parameters use `method("<init>", "()")`.
+     */
+    public fun constructor(vararg parameters: KClass<*>, block: MethodScope.() -> Unit) {
+        val descriptor = if (parameters.isEmpty()) null
+        else parameters.joinToString("", "(", ")") { it.java.descriptorString() }
+        MethodScope(className, "<init>", descriptor, batch).block()
+    }
+
+    /**
      * One overload of [name], picked by JVM descriptor: complete (`"(I)V"`) or just the
      * parameter part (`"(I)"`, `"()"`).
      */

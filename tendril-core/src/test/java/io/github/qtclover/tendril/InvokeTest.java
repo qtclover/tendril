@@ -291,7 +291,9 @@ class InvokeTest {
     @Test
     void selectorsAndPointsAreValidatedUpFront() {
         assertThrows(InjectionException.class,
-                () -> Injector.into(Shop.class).method("wrap").atInvoke("StringBuilder.<init>", call -> { }));
+                () -> Injector.into(Shop.class).method("wrap").atInvoke("<init>", call -> { }));
+        assertThrows(InjectionException.class,
+                () -> Injector.into(Shop.class).method("wrap").atInvoke("new ", call -> { }));
         assertThrows(InjectionException.class,
                 () -> Injector.into(Shop.class).method("wrap").atInvoke("", call -> { }));
         assertThrows(InjectionException.class,

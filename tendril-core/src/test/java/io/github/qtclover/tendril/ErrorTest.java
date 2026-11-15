@@ -70,9 +70,9 @@ class ErrorTest {
     }
 
     @Test
-    void constructorsAndBadDescriptorsAreRejectedUpFront() {
+    void staticInitialisersAndBadDescriptorsAreRejectedUpFront() {
         assertThrows(InjectionException.class,
-                () -> Injector.into(PlayerService.class).method("<init>").atHead(call -> { }));
+                () -> Injector.into(PlayerService.class).method("<clinit>").atHead(call -> { }));
         assertThrows(InjectionException.class,
                 () -> Injector.into(PlayerService.class).methodDescriptor("add", "II").atHead(call -> { }));
         assertThrows(InjectionException.class,

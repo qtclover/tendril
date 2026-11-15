@@ -7,6 +7,9 @@ package io.github.qtclover.tendril;
  * <p>Given {@code int price = pricing.priceOf(item, quantity);} inside a hooked
  * method, the receiver is {@code pricing}, the arguments are {@code item} and
  * {@code quantity}, and the result is what ends up in {@code price}.
+ *
+ * <p>A {@code new Foo(a, b)} expression is treated as a call named {@code <init>}
+ * with no receiver, whose result is the new object.
  */
 public interface InvokedCall {
 
@@ -56,6 +59,12 @@ public interface InvokedCall {
 
     /** At {@link At#AFTER_INVOKE}: what the call returned (null for void). */
     Object getResult();
+
+    /** {@link #getResult()}, cast. */
+    @SuppressWarnings("unchecked")
+    default <T> T getResultAs() {
+        return (T) getResult();
+    }
 
     /**
      * At {@link At#AFTER_INVOKE}: replaces what the call returned. At {@link At#INVOKE}:

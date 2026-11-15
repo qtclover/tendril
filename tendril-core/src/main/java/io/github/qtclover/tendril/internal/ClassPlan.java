@@ -14,7 +14,7 @@ import java.util.TreeSet;
 final class ClassPlan {
 
     /** What to weave into one method: its site, and the calls inside it to wrap, by call index. */
-    record Weave(Site site, Map<Integer, InvokePoint> points) {
+    record Weave(Site site, Map<Integer, InvokePoint> points, int instructionCount) {
     }
 
     final String internalName;
@@ -98,7 +98,7 @@ final class ClassPlan {
             if (matchesMethod(injection, method.getKey())) {
                 methodFound = true;
                 for (CallRef call : method.getValue()) {
-                    if (!call.name().startsWith("<")) {
+                    if (call.hookable()) {
                         calls.add(call.describe());
                     }
                 }
@@ -149,7 +149,7 @@ final class ClassPlan {
                 wrapped.put(index, point);
                 nowWoven.add(pointKey);
             }
-            result.put(key, new Weave(site, wrapped));
+            result.put(key, new Weave(site, wrapped, method.getValue().size()));
         }
         woven = nowWoven;
         return result;

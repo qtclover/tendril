@@ -44,9 +44,8 @@ public final class InjectionBatch {
         Objects.requireNonNull(methodName, "methodName");
         Objects.requireNonNull(at, "at");
         Objects.requireNonNull(hook, "hook");
-        if (methodName.equals("<init>") || methodName.equals("<clinit>")) {
-            throw new InjectionException("Constructors and static initialisers cannot be hooked (yet): "
-                    + className + "." + methodName);
+        if (methodName.equals("<clinit>")) {
+            throw new InjectionException("Static initialisers cannot be hooked: " + className);
         }
         String normalised = descriptor == null || descriptor.isEmpty() ? null : Descriptors.validate(descriptor);
         boolean invokePoint = Points.isInsideMethod(at);

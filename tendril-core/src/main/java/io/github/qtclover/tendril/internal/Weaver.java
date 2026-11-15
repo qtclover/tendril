@@ -9,8 +9,14 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.commons.AdviceAdapter;
 import org.objectweb.asm.commons.Method;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,31 +84,54 @@ final class Weaver {
     }
 
     /**
-     * Every method that has a body and is not a constructor or initialiser, keyed by
-     * name + descriptor, with the calls it makes in instruction order. The position
-     * in that list is how a call is identified, so {@link HookAdapter} must count
-     * exactly the same instructions.
+     * Every method that has a body, keyed by name + descriptor, with the instructions
+     * in it that a hook could be attached to, in order. The position in that list is
+     * how an instruction is identified, so {@link HookAdapter} must count exactly the
+     * same instructions.
      */
     static Map<String, List<CallRef>> scan(ClassReader reader) {
+        ClassNode node = new ClassNode();
+        reader.accept(node, ClassReader.SKIP_FRAMES);
         Map<String, List<CallRef>> result = new LinkedHashMap<>();
-        reader.accept(new ClassVisitor(ASM_API) {
-            @Override
-            public MethodVisitor visitMethod(int access, String name, String desc, String sig, String[] ex) {
-                if ((access & NOT_HOOKABLE) != 0 || name.startsWith("<")) {
-                    return null;
-                }
-                List<CallRef> calls = new ArrayList<>();
-                result.put(name + desc, calls);
-                return new MethodVisitor(ASM_API) {
-                    @Override
-                    public void visitMethodInsn(int opcode, String owner, String callee, String calleeDesc,
-                                                boolean isInterface) {
-                        calls.add(new CallRef(owner, callee, calleeDesc));
-                    }
-                };
+        for (MethodNode method : node.methods) {
+            if ((method.access & NOT_HOOKABLE) != 0 || method.name.equals("<clinit>")) {
+                continue;
             }
-        }, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            result.put(method.name + method.desc, scan(method));
+        }
         return result;
+    }
+
+    private static List<CallRef> scan(MethodNode method) {
+        List<CallRef> found = new ArrayList<>();
+        // In a constructor nothing can be wrapped until super(...) or this(...) has
+        // returned: before that "this" is not an object yet and the woven head code,
+        // which sets up the context, has not run.
+        boolean ready = !method.name.equals("<init>");
+        // One entry per "new" whose constructor call has not been seen yet; the value
+        // says whether the usual "dup" follows, which leaves the new object on the stack.
+        Deque<Boolean> pendingNew = new ArrayDeque<>();
+        for (AbstractInsnNode insn : method.instructions) {
+            if (insn.getOpcode() == Opcodes.NEW) {
+                AbstractInsnNode next = insn.getNext();
+                while (next != null && next.getOpcode() < 0) {
+                    next = next.getNext();
+                }
+                pendingNew.push(next != null && next.getOpcode() == Opcodes.DUP);
+            } else if (insn instanceof MethodInsnNode call) {
+                if (!call.name.equals("<init>")) {
+                    found.add(new CallRef(CallRef.Kind.CALL, call.owner, call.name, call.desc, ready));
+                } else if (!pendingNew.isEmpty()) {
+                    boolean duplicated = pendingNew.pop();
+                    found.add(new CallRef(CallRef.Kind.NEW, call.owner, call.name, call.desc, ready && duplicated));
+                } else {
+                    // The super(...) or this(...) call of a constructor.
+                    found.add(new CallRef(CallRef.Kind.CALL, call.owner, call.name, call.desc, false));
+                    ready = true;
+                }
+            }
+        }
+        return found;
     }
 
     static byte[] weave(ClassReader reader, ClassLoader loader, Map<String, ClassPlan.Weave> plan) {
@@ -142,6 +171,7 @@ final class Weaver {
         private final Type[] argumentTypes;
         private final Map<Integer, InvokePoint> points;
         private int contextLocal;
+        private final int instructionCount;
         private int callIndex;
         private Label bodyStart;
 
@@ -149,6 +179,7 @@ final class Weaver {
             super(ASM_API, mv, access, name, desc);
             this.siteId = weave.site().id;
             this.points = weave.points();
+            this.instructionCount = weave.instructionCount();
             this.owner = owner;
             this.isStatic = (access & Opcodes.ACC_STATIC) != 0;
             this.returnType = Type.getReturnType(desc);
@@ -210,6 +241,10 @@ final class Weaver {
 
         @Override
         public void visitMaxs(int maxStack, int maxLocals) {
+            if (callIndex != instructionCount) {
+                throw new IllegalStateException("instruction count changed between scan and weave: "
+                        + instructionCount + " then " + callIndex);
+            }
             if (bodyStart != null) {
                 // catch (Throwable t) {
                 //     t = Bridge.thrown(ctx, t);
@@ -265,13 +300,30 @@ final class Weaver {
             // Code this adapter emits goes straight to "mv", so only instructions of
             // the original method arrive here, in the order scan() saw them.
             InvokePoint point = points.get(callIndex++);
-            if (point == null) {
+            if (point == null || bodyStart == null) {
                 super.visitMethodInsn(opcode, calleeOwner, name, desc, isInterface);
                 return;
             }
+            boolean isNew = point.call.kind() == CallRef.Kind.NEW;
             Type[] parameters = Type.getArgumentTypes(desc);
-            Type result = Type.getReturnType(desc);
-            boolean hasReceiver = opcode != INVOKESTATIC;
+            Type result = isNew ? Type.getObjectType(calleeOwner) : Type.getReturnType(desc);
+            boolean hasReceiver = opcode != INVOKESTATIC && !isNew;
+            wrap(point, hasReceiver ? Type.getObjectType(calleeOwner) : null, parameters, result, isNew,
+                    () -> mv.visitMethodInsn(opcode, calleeOwner, name, desc, isInterface));
+        }
+
+        /**
+         * Emits the wrapper around one instruction. On entry the receiver (if any) and
+         * the operands are on the stack, exactly as the instruction expects them.
+         *
+         * @param receiver type of the object operated on, or null if there is none
+         * @param isNew    the instruction is the constructor call of a {@code new}
+         *                 expression: two references to the uninitialised object sit
+         *                 below the arguments, and one initialised reference is left
+         */
+        private void wrap(InvokePoint point, Type receiver, Type[] parameters, Type result, boolean isNew,
+                          Runnable original) {
+            boolean hasReceiver = receiver != null;
 
             // The receiver and arguments are on the stack. Move them into locals.
             // Typed locals keep the receiver's exact type for the verifier.
@@ -282,7 +334,7 @@ final class Weaver {
             }
             int receiverLocal = -1;
             if (hasReceiver) {
-                receiverLocal = newLocal(Type.getObjectType(calleeOwner));
+                receiverLocal = newLocal(receiver);
                 storeLocal(receiverLocal);
             }
 
@@ -319,6 +371,10 @@ final class Weaver {
             loadLocal(callLocal);
             invokeStatic(BRIDGE, SKIPPED);
             ifZCmp(EQ, make);
+            if (isNew) {
+                // Drop the two references to the object that will now never be constructed.
+                mv.visitInsn(POP2);
+            }
             if (result.getSort() != Type.VOID) {
                 loadLocal(callLocal);
                 invokeStatic(BRIDGE, CALL_RESULT);
@@ -335,7 +391,7 @@ final class Weaver {
                 arrayLoad(OBJECT);
                 unbox(parameters[i]);
             }
-            mv.visitMethodInsn(opcode, calleeOwner, name, desc, isInterface);
+            original.run();
             mark(done);
 
             // result = (T) Bridge.afterCall(call, box(result));

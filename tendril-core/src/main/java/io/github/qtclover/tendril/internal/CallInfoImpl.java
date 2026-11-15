@@ -118,6 +118,10 @@ final class CallInfoImpl implements CallInfo {
     @Override
     public void swallow() {
         requireThrow("swallow()");
+        if (site.name.equals("<init>")) {
+            throw new IllegalStateException("An exception from a constructor cannot be swallowed: "
+                    + "the object would be left half built");
+        }
         if (!swallowed) {
             swallowed = true;
             result = Values.zero(site.desc);
@@ -143,6 +147,10 @@ final class CallInfoImpl implements CallInfo {
         if (at != At.HEAD) {
             throw new IllegalStateException("cancel() only works at HEAD; " + site.name
                     + " has already run. Use setResult() to change what it returns.");
+        }
+        if (site.name.equals("<init>")) {
+            throw new IllegalStateException("A constructor cannot be cancelled: the object would be left "
+                    + "half built");
         }
         if (!cancelled) {
             cancelled = true;

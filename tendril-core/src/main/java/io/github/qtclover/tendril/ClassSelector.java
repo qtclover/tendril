@@ -28,6 +28,17 @@ public final class ClassSelector {
     }
 
     /**
+     * The constructors of the class: all of them, or the one with exactly these
+     * parameter types. Head hooks run right after {@code super(...)} returns.
+     * For the constructor with no parameters use
+     * {@link #methodDescriptor methodDescriptor("<init>", "()")}.
+     */
+    public MethodSelector constructor(Class<?>... parameters) {
+        return new MethodSelector(className, "<init>",
+                parameters.length == 0 ? null : Descriptors.parameters(parameters));
+    }
+
+    /**
      * The overload of {@code name} matching a JVM descriptor: either complete
      * ({@code "(I)V"}) or only the parameter part ({@code "(I)"}, {@code "()"}).
      */

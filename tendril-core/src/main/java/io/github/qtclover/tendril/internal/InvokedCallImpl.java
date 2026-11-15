@@ -78,6 +78,10 @@ final class InvokedCallImpl implements InvokedCall {
             throw new IllegalStateException("The call to " + name() + " has already been made; "
                     + "skip() only works at INVOKE. Use setResult() to change what it returned.");
         }
+        if (point.call.kind() == CallRef.Kind.NEW) {
+            throw new IllegalStateException("A constructor call can only be skipped with an object "
+                    + "to use instead: skip(replacement)");
+        }
         if (!skipped) {
             skipped = true;
             result = Values.zero(descriptor());
@@ -96,11 +100,15 @@ final class InvokedCallImpl implements InvokedCall {
 
     @Override
     public void setResult(Object value) {
-        if (Values.returnsVoid(descriptor())) {
+        String resultDescriptor = point.call.resultDescriptor();
+        if (Values.returnsVoid(resultDescriptor)) {
             throw new IllegalStateException(label() + " returns void, so there is no result to set"
                     + (after ? "" : "; use skip() to skip the call"));
         }
-        result = Values.fit(value, descriptor(), -1, caller, "the result", label());
+        if (value == null && point.call.kind() == CallRef.Kind.NEW) {
+            throw new IllegalArgumentException("A new expression cannot produce null");
+        }
+        result = Values.fit(value, resultDescriptor, -1, caller, "the result", label());
         if (!after) {
             skipped = true;
         }
