@@ -51,6 +51,7 @@ public interface CallInfo {
     /**
      * Sets the return value. At {@link At#HEAD} this also cancels the call, so the
      * method body never runs. At {@link At#RETURN} it replaces the value being returned.
+     * At {@link At#THROW} it swallows the exception and returns the value instead.
      *
      * @throws IllegalStateException    if the method returns void, or at an invoke point
      * @throws IllegalArgumentException if the value does not fit the return type
@@ -72,6 +73,26 @@ public interface CallInfo {
 
     /** True once the call has been cancelled. */
     boolean isCancelled();
+
+    /** At {@link At#THROW}: the exception that is leaving the method. Otherwise null. */
+    Throwable getThrown();
+
+    /**
+     * At {@link At#THROW}: throws {@code throwable} out of the method instead.
+     *
+     * @throws IllegalStateException anywhere else
+     */
+    void setThrown(Throwable throwable);
+
+    /**
+     * At {@link At#THROW}: drops the exception, so the method returns normally with
+     * {@code null}, {@code 0} or {@code false}. To return something else, use
+     * {@link #setResult}, which swallows the exception as well. Return hooks do not
+     * run for a method that ended this way.
+     *
+     * @throws IllegalStateException anywhere else
+     */
+    void swallow();
 
     /**
      * The call this hook is attached to, inside the hooked method. Everything else on

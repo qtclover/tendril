@@ -46,13 +46,19 @@ public final class Bridge {
 
         /** Runs the hooks placed after a call. Returns the (possibly replaced) boxed result. */
         Object afterCall(Object callContext, Object result);
+
+        /**
+         * Runs throw hooks for an exception leaving the method. Returns the exception to
+         * throw, or null if a hook swallowed it and the method should return normally.
+         */
+        Throwable thrown(Object context, Throwable throwable);
     }
 
     /**
      * Bumped whenever this class changes shape, so that the core can refuse to work
      * with an agent jar from a different release instead of failing inside woven code.
      */
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     /** Set once by {@link Agent}. */
     public static volatile Instrumentation instrumentation;
@@ -93,6 +99,14 @@ public final class Bridge {
         }
         Handler h = handler;
         return h == null ? result : h.exit(context, result);
+    }
+
+    public static Throwable thrown(Object context, Throwable throwable) {
+        if (context == null) {
+            return throwable;
+        }
+        Handler h = handler;
+        return h == null ? throwable : h.thrown(context, throwable);
     }
 
     public static Object beforeCall(Object context, int point, Object receiver, Object[] args) {

@@ -92,6 +92,14 @@ public class MethodScope internal constructor(
     }
 
     /**
+     * Runs [hook] when an exception is about to leave the method. The hook can read
+     * `thrown`, replace it, or call `swallow()` / set `result` to return normally.
+     */
+    public fun atThrow(hook: (CallInfo) -> Unit) {
+        batch.add(className, methodName, descriptor, At.THROW, Hook(hook))
+    }
+
+    /**
      * Runs [hook] just before a call inside the method. [call] is `"name"`,
      * `"Owner.name"`, or either followed by a descriptor. The hook reaches the call
      * through `invoked()` and can change its arguments or skip it:

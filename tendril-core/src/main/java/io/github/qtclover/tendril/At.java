@@ -7,6 +7,12 @@ public enum At {
     /** Before every normal return. Not run when the method exits by throwing. */
     RETURN,
     /**
+     * When an exception is about to leave the method. The hook can look at it, replace
+     * it, or swallow it and make the method return normally. Not run for exceptions the
+     * method catches itself, nor for exceptions thrown by hooks.
+     */
+    THROW,
+    /**
      * Just before a particular method call inside the target method. The hook can
      * read and change the call's arguments, or skip the call. See {@link InvokedCall}.
      */

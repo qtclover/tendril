@@ -73,7 +73,7 @@ final class Dispatcher implements Bridge.Handler {
             return null;
         }
         InjectionImpl[] hooks = site.head;
-        if (hooks.length == 0 && site.ret.length == 0 && site.invokeHooks == 0) {
+        if (hooks.length == 0 && !site.hasHooks()) {
             return null;
         }
         Guard guard = GUARD.get();
@@ -108,6 +108,19 @@ final class Dispatcher implements Bridge.Handler {
         call.result = result;
         run(hooks, call, GUARD.get(), RUN_ALL);
         return call.result;
+    }
+
+    @Override
+    public Throwable thrown(Object context, Throwable throwable) {
+        CallInfoImpl call = (CallInfoImpl) context;
+        InjectionImpl[] hooks = call.site.thr;
+        if (hooks.length == 0 || call.hookFailed) {
+            return throwable;
+        }
+        call.at = At.THROW;
+        call.thrown = throwable;
+        run(hooks, call, GUARD.get(), RUN_ALL);
+        return call.swallowed ? null : call.thrown;
     }
 
     @Override
@@ -177,6 +190,7 @@ final class Dispatcher implements Bridge.Handler {
                 }
             }
         } catch (Throwable t) {
+            call.hookFailed = true;
             throw Values.<RuntimeException>sneaky(t);
         } finally {
             guard.pop();

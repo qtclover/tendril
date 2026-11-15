@@ -3,6 +3,7 @@ package io.github.qtclover.tendril;
 import io.github.qtclover.tendril.internal.CallSelector;
 import io.github.qtclover.tendril.internal.Descriptors;
 import io.github.qtclover.tendril.internal.InjectionImpl;
+import io.github.qtclover.tendril.internal.Points;
 import io.github.qtclover.tendril.internal.Registry;
 
 import java.util.ArrayList;
@@ -48,7 +49,7 @@ public final class InjectionBatch {
                     + className + "." + methodName);
         }
         String normalised = descriptor == null || descriptor.isEmpty() ? null : Descriptors.validate(descriptor);
-        boolean invokePoint = at == At.INVOKE || at == At.AFTER_INVOKE;
+        boolean invokePoint = Points.isInsideMethod(at);
         boolean hasSelector = invoke != null && !invoke.isBlank();
         if (invokePoint != hasSelector) {
             throw new InjectionException(invokePoint

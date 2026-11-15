@@ -71,7 +71,7 @@ public final class Attacher {
     }
 
     /** Must equal {@code Bridge.VERSION} in the agent jar this core was built with. */
-    private static final int BRIDGE_VERSION = 2;
+    private static final int BRIDGE_VERSION = 3;
 
     private static Instrumentation findInstalledAgent() {
         Class<?> bridge;

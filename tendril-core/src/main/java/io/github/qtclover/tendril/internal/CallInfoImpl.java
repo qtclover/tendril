@@ -16,6 +16,10 @@ final class CallInfoImpl implements CallInfo {
     boolean cancelled;
     Object result;
     InvokedCallImpl invoked;
+    Throwable thrown;
+    boolean swallowed;
+    /** Set when a hook threw: that exception is the hook's business, not something for throw hooks. */
+    boolean hookFailed;
 
     CallInfoImpl(Site site, Class<?> owner, Object self, Object[] args) {
         this.site = site;
@@ -91,6 +95,38 @@ final class CallInfoImpl implements CallInfo {
         result = Values.fit(value, site.desc, -1, owner, "the return value", site.name + site.desc);
         if (at == At.HEAD) {
             cancelled = true;
+        } else if (at == At.THROW) {
+            swallowed = true;
+        }
+    }
+
+    @Override
+    public Throwable getThrown() {
+        return thrown;
+    }
+
+    @Override
+    public void setThrown(Throwable throwable) {
+        requireThrow("setThrown()");
+        if (throwable == null) {
+            throw new NullPointerException("throwable; use swallow() to drop the exception");
+        }
+        thrown = throwable;
+        swallowed = false;
+    }
+
+    @Override
+    public void swallow() {
+        requireThrow("swallow()");
+        if (!swallowed) {
+            swallowed = true;
+            result = Values.zero(site.desc);
+        }
+    }
+
+    private void requireThrow(String what) {
+        if (at != At.THROW) {
+            throw new IllegalStateException(what + " only works in a hook at THROW; this hook runs at " + at);
         }
     }
 
@@ -99,6 +135,10 @@ final class CallInfoImpl implements CallInfo {
         if (isInvokePoint()) {
             throw new IllegalStateException("cancel() only works at HEAD. Leaving " + site.name
                     + " from the middle would skip its finally blocks; use invoked().skip() to skip just the call");
+        }
+        if (at == At.THROW) {
+            throw new IllegalStateException("cancel() only works at HEAD. To stop the exception from "
+                    + site.name + " use swallow() or setResult()");
         }
         if (at != At.HEAD) {
             throw new IllegalStateException("cancel() only works at HEAD; " + site.name
@@ -125,7 +165,7 @@ final class CallInfoImpl implements CallInfo {
     }
 
     private boolean isInvokePoint() {
-        return at == At.INVOKE || at == At.AFTER_INVOKE;
+        return Points.isInsideMethod(at);
     }
 
     private void checkIndex(int index) {

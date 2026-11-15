@@ -23,6 +23,11 @@ public final class MethodSelector {
         return at(At.RETURN, hook);
     }
 
+    /** Runs {@code hook} when an exception is about to leave the method. */
+    public Injection atThrow(Hook hook) {
+        return at(At.THROW, hook);
+    }
+
     /**
      * Runs {@code hook} just before every call to {@code call} inside the method.
      * The hook gets at the call through {@link CallInfo#invoked()}.
@@ -49,7 +54,7 @@ public final class MethodSelector {
                 .install();
     }
 
-    /** For {@link At#HEAD} and {@link At#RETURN}; invoke points need a call, see {@link #atInvoke}. */
+    /** For {@link At#HEAD}, {@link At#RETURN} and {@link At#THROW}; invoke points need a call, see {@link #atInvoke}. */
     public Injection at(At at, Hook hook) {
         return Injector.batch().add(className, methodName, descriptor, at, hook).install();
     }

@@ -16,6 +16,7 @@ final class Site {
 
     volatile InjectionImpl[] head = NONE;
     volatile InjectionImpl[] ret = NONE;
+    volatile InjectionImpl[] thr = NONE;
     /** Number of hooks on calls inside this method. */
     volatile int invokeHooks;
 
@@ -27,6 +28,6 @@ final class Site {
     }
 
     boolean hasHooks() {
-        return head.length > 0 || ret.length > 0 || invokeHooks > 0;
+        return head.length > 0 || ret.length > 0 || thr.length > 0 || invokeHooks > 0;
     }
 }

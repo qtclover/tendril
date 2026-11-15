@@ -26,8 +26,14 @@ import java.util.Map;
  *     if (Bridge.cancelled(ctx)) return (int) Bridge.result(ctx);
  *     amount = (int) args[0];                      // hooks may have changed it
  *
- *     ... original body, with every "return x" turned into
- *     return (int) Bridge.exit(ctx, x);
+ *     try {
+ *         ... original body, with every "return x" turned into
+ *         return (int) Bridge.exit(ctx, x);
+ *     } catch (Throwable t) {
+ *         t = Bridge.thrown(ctx, t);
+ *         if (t != null) throw t;
+ *         return (int) Bridge.result(ctx);         // a hook swallowed it
+ *     }
  * }
  * }</pre>
  *
@@ -57,6 +63,8 @@ final class Weaver {
     private static final Method RESULT = new Method("result", "(Ljava/lang/Object;)Ljava/lang/Object;");
     private static final Method EXIT = new Method("exit", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
 
+    private static final Method THROWN = new Method("thrown",
+            "(Ljava/lang/Object;Ljava/lang/Throwable;)Ljava/lang/Throwable;");
     private static final Method BEFORE_CALL = new Method("beforeCall",
             "(Ljava/lang/Object;ILjava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
     private static final Method SKIPPED = new Method("skipped", "(Ljava/lang/Object;)Z");
@@ -135,6 +143,7 @@ final class Weaver {
         private final Map<Integer, InvokePoint> points;
         private int contextLocal;
         private int callIndex;
+        private Label bodyStart;
 
         HookAdapter(MethodVisitor mv, int access, String name, String desc, ClassPlan.Weave weave, Type owner) {
             super(ASM_API, mv, access, name, desc);
@@ -194,6 +203,39 @@ final class Weaver {
                 unbox(argumentTypes[i]);
                 storeArg(i);
             }
+
+            // Everything from here on is covered by the catch-all added in visitMaxs.
+            bodyStart = mark();
+        }
+
+        @Override
+        public void visitMaxs(int maxStack, int maxLocals) {
+            if (bodyStart != null) {
+                // catch (Throwable t) {
+                //     t = Bridge.thrown(ctx, t);
+                //     if (t != null) throw t;
+                //     return (T) Bridge.result(ctx);      // a hook swallowed it
+                // }
+                // Declared last, so the method's own handlers keep priority.
+                Label bodyEnd = mark();
+                catchException(bodyStart, bodyEnd, null);
+                loadLocal(contextLocal);
+                swap();
+                invokeStatic(BRIDGE, THROWN);
+                dup();
+                Label swallowed = newLabel();
+                ifNull(swallowed);
+                mv.visitInsn(ATHROW);
+                mark(swallowed);
+                pop();
+                if (returnType.getSort() != Type.VOID) {
+                    loadLocal(contextLocal);
+                    invokeStatic(BRIDGE, RESULT);
+                    unbox(returnType);
+                }
+                mv.visitInsn(returnType.getOpcode(IRETURN));
+            }
+            super.visitMaxs(maxStack, maxLocals);
         }
 
         @Override

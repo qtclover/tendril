@@ -1,7 +1,5 @@
 package io.github.qtclover.tendril.internal;
 
-import io.github.qtclover.tendril.At;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -244,6 +242,7 @@ final class ClassPlan {
         String key = site.name + site.desc;
         List<InjectionImpl> head = new ArrayList<>();
         List<InjectionImpl> ret = new ArrayList<>();
+        List<InjectionImpl> thr = new ArrayList<>();
         int invokeHooks = 0;
         for (InjectionImpl injection : injections) {
             if (injection.invoke != null) {
@@ -251,11 +250,17 @@ final class ClassPlan {
                     invokeHooks++;
                 }
             } else if (matchesMethod(injection, key)) {
-                (injection.at == At.HEAD ? head : ret).add(injection);
+                switch (injection.at) {
+                    case HEAD -> head.add(injection);
+                    case RETURN -> ret.add(injection);
+                    case THROW -> thr.add(injection);
+                    default -> throw new IllegalStateException("not a method-level point: " + injection.at);
+                }
             }
         }
         site.head = head.toArray(Site.NONE);
         site.ret = ret.toArray(Site.NONE);
+        site.thr = thr.toArray(Site.NONE);
         site.invokeHooks = invokeHooks;
     }
 
@@ -265,7 +270,7 @@ final class ClassPlan {
         List<InjectionImpl> after = new ArrayList<>();
         for (InjectionImpl injection : injections) {
             if (callIndices(injection, key).contains(point.index)) {
-                (injection.at == At.INVOKE ? before : after).add(injection);
+                (Points.runsBefore(injection.at) ? before : after).add(injection);
             }
         }
         point.before = before.toArray(Site.NONE);

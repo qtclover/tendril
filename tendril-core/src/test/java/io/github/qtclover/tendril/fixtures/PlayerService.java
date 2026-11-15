@@ -110,6 +110,10 @@ public class PlayerService {
         return x + 1;
     }
 
+    public void explode(String message) {
+        throw new IllegalArgumentException(message);
+    }
+
     public int parse(String text) {
         return Integer.parseInt(text);
     }
