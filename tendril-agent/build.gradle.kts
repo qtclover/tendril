@@ -9,6 +9,7 @@ tasks.jar {
         attributes(
             "Premain-Class" to "io.github.qtclover.tendril.agent.Agent",
             "Agent-Class" to "io.github.qtclover.tendril.agent.Agent",
+            "Main-Class" to "io.github.qtclover.tendril.agent.Cli",
             "Can-Retransform-Classes" to "true",
             "Can-Redefine-Classes" to "true",
             "Implementation-Title" to "tendril-agent",

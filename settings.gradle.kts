@@ -6,4 +6,4 @@ dependencyResolutionManagement {
     }
 }
 
-include("tendril-agent", "tendril-core", "tendril-kotlin", "example")
+include("tendril-agent", "tendril-core", "tendril-kotlin", "tendril-agent-all", "example")

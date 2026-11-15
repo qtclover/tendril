@@ -3,9 +3,18 @@ package io.github.qtclover.tendril.internal;
 import io.github.qtclover.tendril.Injector;
 
 /**
- * Called reflectively by the agent's {@code premain}. The agent arguments are a
- * comma-separated list of classes with {@code @Inject} methods, so an application
- * can be hooked without changing a line of it:
+ * Called reflectively by the agent, at JVM start and whenever it is loaded into a
+ * running JVM, with the agent arguments. They are either a comma-separated list of
+ * classes with {@code @Inject} methods, or {@code key=value} pairs separated by
+ * semicolons:
+ *
+ * <ul>
+ *   <li>{@code hooks=com.example.Hooks,com.example.More} registers hook classes;</li>
+ *   <li>{@code remove} removes every hook;</li>
+ *   <li>{@code classpath=...} has already been dealt with by the agent.</li>
+ * </ul>
+ *
+ * So an application can be hooked without changing a line of it:
  * {@code -javaagent:tendril-agent.jar=com.example.Hooks}.
  */
 public final class PremainHook {
@@ -17,7 +26,20 @@ public final class PremainHook {
         if (args == null || args.isBlank()) {
             return;
         }
-        for (String name : args.split(",")) {
+        for (String part : args.split(";")) {
+            part = part.trim();
+            if (part.equals("remove")) {
+                Injector.removeAll();
+            } else if (part.startsWith("hooks=")) {
+                register(part.substring("hooks=".length()));
+            } else if (!part.isEmpty() && part.indexOf('=') < 0) {
+                register(part);
+            }
+        }
+    }
+
+    private static void register(String classNames) {
+        for (String name : classNames.split(",")) {
             name = name.trim();
             if (name.isEmpty()) {
                 continue;
