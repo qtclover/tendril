@@ -1,0 +1,47 @@
+name: Release
+
+# Publishes to Maven Central when a version tag is pushed: git tag v0.2.0 && git push origin v0.2.0
+# Needs four repository secrets; see docs/releasing.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Check that the tag matches the version
+        run: |
+          version=$(grep '^version=' gradle.properties | cut -d= -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match version $version in gradle.properties"
+            exit 1
+          fi
+      - name: Build, test, sign and stage
+        env:
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
+        run: ./gradlew build publishAllPublicationsToStagingRepository --no-daemon
+      - name: Upload the bundle to the Central Portal
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          cd build/staging-deploy
+          zip -qr ../bundle.zip .
+          token=$(printf '%s:%s' "$CENTRAL_USERNAME" "$CENTRAL_PASSWORD" | base64 -w0)
+          # USER_MANAGED: the upload is validated and then waits for a click on
+          # "Publish" at https://central.sonatype.com/publishing/deployments
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer $token" \
+            -F "bundle=@../bundle.zip" \
+            "https://central.sonatype.com/api/v1/publisher/upload?name=tendril-$GITHUB_REF_NAME&publishingType=USER_MANAGED"

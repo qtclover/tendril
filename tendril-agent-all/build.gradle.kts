@@ -40,6 +40,29 @@ tasks.assemble {
     dependsOn(tasks.shadowJar)
 }
 
+// Published as a plain jar without dependencies: everything is inside. Maven Central
+// insists on a sources and a javadoc jar; the sources are those of the other modules.
+val pointer = tasks.register<WriteProperties>("pointer") {
+    destinationFile = layout.buildDirectory.file("pointer/README.properties")
+    property("contents", "Shaded bundle of tendril-agent, tendril-core and ASM. See those artifacts for sources and javadoc.")
+}
+val sourcesJar = tasks.register<Jar>("sourcesJar") {
+    archiveClassifier = "sources"
+    from(pointer)
+}
+val javadocJar = tasks.register<Jar>("javadocJar") {
+    archiveClassifier = "javadoc"
+    from(pointer)
+}
+
+publishing {
+    publications.create<MavenPublication>("maven") {
+        artifact(tasks.shadowJar)
+        artifact(sourcesJar)
+        artifact(javadocJar)
+    }
+}
+
 // Two tiny programs for the tests: an application that knows nothing about Tendril,
 // and a jar of hooks for it.
 val targetApp = sourceSets.create("targetApp")

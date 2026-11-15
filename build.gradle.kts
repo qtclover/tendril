@@ -5,33 +5,80 @@ plugins {
 }
 
 subprojects {
-    // The three library modules can be installed with ./gradlew publishToMavenLocal.
+    val junitVersion = property("junitVersion") as String
+
+    // The library modules are published; the example and the benchmarks are not.
+    // tendril-agent-all publishes its shaded jar and declares that publication itself.
     if (name.startsWith("tendril-")) {
         apply(plugin = "maven-publish")
-        plugins.withType<JavaPlugin> {
-            extensions.configure<JavaPluginExtension> {
-                withSourcesJar()
-            }
-            extensions.configure<PublishingExtension> {
-                publications.create<MavenPublication>("maven") {
-                    from(components["java"])
-                    pom {
-                        name = project.name
-                        description = provider { project.description }
-                        url = "https://github.com/qtclover/tendril"
-                        licenses {
-                            license {
-                                name = "MIT License"
-                                url = "https://opensource.org/license/mit"
-                            }
-                        }
+        apply(plugin = "signing")
+
+        if (name != "tendril-agent-all") {
+            plugins.withType<JavaPlugin> {
+                extensions.configure<JavaPluginExtension> {
+                    withSourcesJar()
+                    withJavadocJar()
+                }
+                extensions.configure<PublishingExtension> {
+                    publications.create<MavenPublication>("maven") {
+                        from(components["java"])
                     }
                 }
             }
         }
-    }
 
-    val junitVersion = property("junitVersion") as String
+        extensions.configure<PublishingExtension> {
+            // Maven Central wants every POM to say what the thing is, whose it is and
+            // under which licence.
+            publications.withType<MavenPublication>().configureEach {
+                pom {
+                    name = project.name
+                    description = provider { project.description }
+                    url = "https://github.com/qtclover/tendril"
+                    licenses {
+                        license {
+                            name = "MIT License"
+                            url = "https://opensource.org/license/mit"
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = "qtclover"
+                            name = "qtclover"
+                            url = "https://github.com/qtclover"
+                        }
+                    }
+                    scm {
+                        url = "https://github.com/qtclover/tendril"
+                        connection = "scm:git:https://github.com/qtclover/tendril.git"
+                        developerConnection = "scm:git:ssh://git@github.com/qtclover/tendril.git"
+                    }
+                }
+            }
+            // ./gradlew publishAllPublicationsToStagingRepository lays everything out in
+            // build/staging-deploy, which the release workflow uploads to Maven Central.
+            repositories {
+                maven {
+                    name = "staging"
+                    url = uri(rootProject.layout.buildDirectory.dir("staging-deploy"))
+                }
+            }
+        }
+
+        // Signed only when a key is supplied (the release workflow does), so that
+        // publishToMavenLocal keeps working for everyone else.
+        val signingKey = providers.gradleProperty("signingKey").orNull
+        if (signingKey != null) {
+            extensions.configure<SigningExtension> {
+                useInMemoryPgpKeys(signingKey, providers.gradleProperty("signingPassword").orNull)
+                sign(extensions.getByType<PublishingExtension>().publications)
+            }
+        }
+
+        tasks.withType<Javadoc>().configureEach {
+            (options as StandardJavadocDocletOptions).addBooleanOption("Xdoclint:none", true)
+        }
+    }
 
     plugins.withType<JavaPlugin> {
         // Java 17 bytecode, whatever JDK runs the build.
