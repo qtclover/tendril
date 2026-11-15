@@ -59,10 +59,37 @@ public final class Injector {
 
     /**
      * Starts a fluent injection into a class by binary name. The class does not need
-     * to be loaded: the hooks are woven in when it is.
+     * to be loaded: the hooks are woven in when it is. The name may also be a pattern,
+     * see {@link #intoMatching} and {@link #intoSubtypes}.
      */
     public static ClassSelector into(String className) {
         return new ClassSelector(className);
+    }
+
+    /**
+     * Starts a fluent injection into {@code supertype} and every class that extends or
+     * implements it, whether loaded already or later. Classes that do not declare the
+     * chosen method themselves are left alone, as are JDK classes.
+     */
+    public static ClassSelector intoSubtypes(Class<?> supertype) {
+        return new ClassSelector(supertype.getName() + "+");
+    }
+
+    /** Like {@link #intoSubtypes(Class)}, by binary name. */
+    public static ClassSelector intoSubtypes(String supertypeName) {
+        return new ClassSelector(supertypeName + "+");
+    }
+
+    /**
+     * Starts a fluent injection into every class whose binary name matches
+     * {@code pattern}, in which {@code *} stands for any run of characters:
+     * {@code "com.example.*"}, {@code "*.service.*Impl"}. JDK classes never match.
+     */
+    public static ClassSelector intoMatching(String pattern) {
+        if (pattern.indexOf('*') < 0) {
+            throw new InjectionException("\"" + pattern + "\" has no * in it; use into() for a single class");
+        }
+        return new ClassSelector(pattern);
     }
 
     /** Installs every static {@link Inject}-annotated method of {@code hooks}. */

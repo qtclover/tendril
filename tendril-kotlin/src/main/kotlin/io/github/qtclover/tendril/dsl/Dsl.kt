@@ -36,8 +36,18 @@ public fun inject(target: KClass<*>, block: ClassScope.() -> Unit): Injection =
     inject(target.java.name, block)
 
 /**
+ * Hooks [T] and every class that extends or implements it, loaded already or later.
+ * A class that does not declare the method itself is left alone, as are JDK classes.
+ */
+public inline fun <reified T : Any> injectSubtypes(noinline block: ClassScope.() -> Unit): Injection =
+    inject(T::class.java.name + "+", block)
+
+/**
  * Like [inject], by binary class name (`com.example.Outer$Inner`). The class is not
  * loaded; if it is not in the JVM yet, the hooks are woven in when it arrives.
+ *
+ * The name may be a pattern: `"com.example.*"` hooks every class whose name matches,
+ * `"com.example.Shape+"` hooks Shape and all its subtypes.
  */
 public fun inject(className: String, block: ClassScope.() -> Unit): Injection {
     val batch = Injector.batch()

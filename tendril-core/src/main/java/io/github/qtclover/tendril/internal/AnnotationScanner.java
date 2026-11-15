@@ -47,7 +47,10 @@ public final class AnnotationScanner {
             throw new InjectionException("@Inject on " + describe(method)
                     + " must set exactly one of target and targetName");
         }
-        return byClass ? inject.target().getName() : inject.targetName();
+        if (byClass) {
+            return inject.target().getName() + (inject.subtypes() ? "+" : "");
+        }
+        return inject.targetName() + (inject.subtypes() && !inject.targetName().endsWith("+") ? "+" : "");
     }
 
     private static Hook toHook(Method method, Object instance) {

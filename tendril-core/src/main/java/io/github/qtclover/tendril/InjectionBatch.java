@@ -23,7 +23,10 @@ public final class InjectionBatch {
     }
 
     /**
-     * @param className  binary name of the target class, e.g. {@code com.example.Foo$Bar}
+     * @param className  binary name of the target class, e.g. {@code com.example.Foo$Bar}; or a
+     *                   pattern: {@code com.example.*} for every class whose name matches, or
+     *                   {@code com.example.Shape+} for Shape and everything that extends or
+     *                   implements it
      * @param descriptor full or parameter-only JVM descriptor, or null for every overload
      */
     public InjectionBatch add(String className, String methodName, String descriptor, At at, Hook hook) {
@@ -79,7 +82,7 @@ public final class InjectionBatch {
             case FIELD_READ -> CallSelector.parseField(invoke, false);
             case FIELD_WRITE -> CallSelector.parseField(invoke, true);
         };
-        pending.add(new InjectionImpl(className.replace('.', '/'), methodName, normalised, at,
+        pending.add(new InjectionImpl(className.trim(), methodName, normalised, at,
                 selector, ordinal, locals, hook));
         return this;
     }

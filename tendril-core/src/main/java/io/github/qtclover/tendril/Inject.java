@@ -23,7 +23,11 @@ public @interface Inject {
     /** The class to hook. Using this loads the class; see {@link #targetName()} to avoid that. */
     Class<?> target() default void.class;
 
-    /** The class to hook, by binary name. Works for classes that are not loaded yet. */
+    /**
+     * The class to hook, by binary name. Works for classes that are not loaded yet.
+     * Also accepts patterns: {@code "com.example.*"} for every class whose name
+     * matches, {@code "com.example.Shape+"} for Shape and all its subtypes.
+     */
     String targetName() default "";
 
     /** Name of the method to hook. */
@@ -34,6 +38,9 @@ public @interface Inject {
      * parameter part such as {@code (I)}. Empty means every overload with that name.
      */
     String descriptor() default "";
+
+    /** With {@link #target()}: also hook every class that extends or implements it. */
+    boolean subtypes() default false;
 
     At at() default At.HEAD;
 

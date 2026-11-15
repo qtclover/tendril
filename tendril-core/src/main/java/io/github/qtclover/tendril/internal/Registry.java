@@ -32,6 +32,8 @@ public final class Registry implements ClassFileTransformer {
     private final Map<String, ClassPlan> plans = new ConcurrentHashMap<>();
     private volatile Site[] sites = new Site[0];
     private volatile InvokePoint[] points = new InvokePoint[0];
+    /** Pattern hooks: checked against every class as it loads. */
+    private volatile InjectionImpl[] patterns = new InjectionImpl[0];
 
     private Registry(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
@@ -87,7 +89,12 @@ public final class Registry implements ClassFileTransformer {
 
     public Injection install(List<InjectionImpl> injections) {
         Map<String, List<InjectionImpl>> byClass = new LinkedHashMap<>();
+        List<InjectionImpl> newPatterns = new ArrayList<>();
         for (InjectionImpl injection : injections) {
+            if (injection.scope != null) {
+                newPatterns.add(injection);
+                continue;
+            }
             checkAllowed(injection.classInternalName);
             byClass.computeIfAbsent(injection.classInternalName, k -> new ArrayList<>()).add(injection);
         }
@@ -146,10 +153,97 @@ public final class Registry implements ClassFileTransformer {
             }
             throw e;
         }
+        if (!newPatterns.isEmpty()) {
+            installPatterns(newPatterns);
+        }
         return new Handle(injections);
     }
 
-    void remove(List<InjectionImpl> injections) {
+    /**
+     * Pattern hooks are lenient where hooks on a named class are strict: a matching
+     * class that cannot be hooked, or has no such method, is simply left alone.
+     */
+    private void installPatterns(List<InjectionImpl> added) {
+        synchronized (this) {
+            InjectionImpl[] table = Arrays.copyOf(patterns, patterns.length + added.size());
+            for (int i = 0; i < added.size(); i++) {
+                table[patterns.length + i] = added.get(i);
+            }
+            patterns = table;
+        }
+        // From here on the transformer applies them to classes as they load.
+        // Now the classes that are already there.
+        for (Class<?> type : instrumentation.getAllLoadedClasses()) {
+            String internal = type.getName().replace('.', '/');
+            if (type.isArray() || type.isPrimitive() || type.isHidden() || type.getClassLoader() == null
+                    || !patternsMayTouch(internal) || !instrumentation.isModifiableClass(type)) {
+                continue;
+            }
+            List<InjectionImpl> copies = null;
+            for (InjectionImpl pattern : added) {
+                if (pattern.scope.matches(type)) {
+                    InjectionImpl copy = pattern.copyFor(internal);
+                    if (copy != null) {
+                        if (copies == null) {
+                            copies = new ArrayList<>();
+                        }
+                        copies.add(copy);
+                    }
+                }
+            }
+            if (copies == null) {
+                continue;
+            }
+            ClassPlan plan = plans.computeIfAbsent(internal, ClassPlan::new);
+            plan.add(copies);
+            if (plan.outOfDate() && retransform(plan, List.of(type)) != null) {
+                plan.remove(copies);
+                if (plan.outOfDate()) {
+                    retransform(plan, List.of(type));
+                }
+            }
+        }
+    }
+
+    private static boolean patternsMayTouch(String internalName) {
+        return !isOwnClass(internalName) && !isDispatchCritical(internalName)
+                && !internalName.startsWith("java/") && !internalName.startsWith("jdk/")
+                && !internalName.startsWith("sun/");
+    }
+
+    /** Called by the transformer for every class: gives the class its copy of each pattern hook that matches. */
+    private void applyPatterns(String className, ClassLoader loader, byte[] classFile) {
+        InjectionImpl[] table = patterns;
+        if (table.length == 0 || loader == null || !patternsMayTouch(className)) {
+            return;
+        }
+        List<InjectionImpl> copies = null;
+        for (InjectionImpl pattern : table) {
+            if (pattern.active && pattern.scope.matches(className, loader, classFile)) {
+                InjectionImpl copy = pattern.copyFor(className);
+                if (copy != null) {
+                    if (copies == null) {
+                        copies = new ArrayList<>();
+                    }
+                    copies.add(copy);
+                }
+            }
+        }
+        if (copies != null) {
+            plans.computeIfAbsent(className, ClassPlan::new).add(copies);
+        }
+    }
+
+    void remove(List<InjectionImpl> requested) {
+        // A pattern hook is removed together with the copies made for matching classes.
+        List<InjectionImpl> injections = new ArrayList<>();
+        for (InjectionImpl injection : requested) {
+            if (injection.scope == null) {
+                injections.add(injection);
+            } else {
+                injections.addAll(retire(injection));
+            }
+        }
         Map<String, List<InjectionImpl>> byClass = new LinkedHashMap<>();
         for (InjectionImpl injection : injections) {
             injection.active = false;
@@ -165,7 +259,23 @@ public final class Registry implements ClassFileTransformer {
         restore(byClass.keySet());
     }
 
+    /** Stops a pattern hook from applying to further classes and returns the copies it has made. */
+    private List<InjectionImpl> retire(InjectionImpl pattern) {
+        synchronized (this) {
+            List<InjectionImpl> remaining = new ArrayList<>(Arrays.asList(patterns));
+            remaining.remove(pattern);
+            patterns = remaining.toArray(new InjectionImpl[0]);
+        }
+        synchronized (pattern.copies) {
+            pattern.active = false;
+            return new ArrayList<>(pattern.copies.values());
+        }
+    }
+
     public void removeAll() {
+        for (InjectionImpl pattern : patterns) {
+            retire(pattern);
+        }
         for (ClassPlan plan : plans.values()) {
             for (InjectionImpl injection : plan.clear()) {
                 injection.active = false;
@@ -259,6 +369,14 @@ public final class Registry implements ClassFileTransformer {
         if (className == null) {
             return null;
         }
+        if (classBeingRedefined == null) {
+            try {
+                applyPatterns(className, loader, classfileBuffer);
+            } catch (Throwable t) {
+                System.err.println("[tendril] could not check " + className.replace('/', '.')
+                        + " against pattern hooks: " + t);
+            }
+        }
         ClassPlan plan = plans.get(className);
         if (plan == null) {
             return null;
@@ -277,6 +395,9 @@ public final class Registry implements ClassFileTransformer {
                         // First load: install() could not check the method names
                         // back then, so a typo would otherwise go unnoticed.
                         for (InjectionImpl injection : plan.unmatched()) {
+                            if (injection.template != null) {
+                                continue; // A pattern hook is allowed to match nothing in a class.
+                            }
                             System.err.println("[tendril] warning: " + plan.explainNoMatch(injection)
                                     + " That hook will never run.");
                         }
