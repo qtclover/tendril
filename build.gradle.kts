@@ -5,6 +5,32 @@ plugins {
 }
 
 subprojects {
+    // The three library modules can be installed with ./gradlew publishToMavenLocal.
+    if (name.startsWith("tendril-")) {
+        apply(plugin = "maven-publish")
+        plugins.withType<JavaPlugin> {
+            extensions.configure<JavaPluginExtension> {
+                withSourcesJar()
+            }
+            extensions.configure<PublishingExtension> {
+                publications.create<MavenPublication>("maven") {
+                    from(components["java"])
+                    pom {
+                        name = project.name
+                        description = provider { project.description }
+                        url = "https://github.com/qtclover/tendril"
+                        licenses {
+                            license {
+                                name = "MIT License"
+                                url = "https://opensource.org/license/mit"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     val junitVersion = property("junitVersion") as String
 
     plugins.withType<JavaPlugin> {
