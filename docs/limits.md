@@ -4,8 +4,13 @@ What Tendril cannot do, or does in a way you should know about.
 
 **Scope of v0.1**
 
-- Hooks go at the head of a method and before its returns. There is no redirecting of one
-  particular call inside a method, no field access hooks, no hooks on exceptional exit.
+- Hooks go at the head of a method, before its returns, and before or after a call inside
+  it. There are no field access hooks and no hooks on exceptional exit.
+- A method can only be cancelled at its head. From an invoke point you can skip the call
+  or replace its result, but not make the surrounding method return: leaving a method from
+  the middle would jump over its `finally` blocks and leave monitors held.
+- Constructor calls (`new Foo(...)`) and `invokedynamic` call sites (lambdas, string
+  concatenation) cannot be hooked as invoke points.
 - Constructors and static initialisers cannot be hooked. Nor can `abstract` and `native`
   methods: they have no body.
 - Hooks can observe and steer a method. They cannot add methods, fields or interfaces to a
@@ -22,6 +27,20 @@ What Tendril cannot do, or does in a way you should know about.
 - There is a small window during class loading: if a class is in the middle of being
   defined on one thread at the moment another thread registers a hook for it by name, the
   hook can be missed for that class. Register hooks before the code that triggers loading.
+
+**Invoke points**
+
+- A call is matched by what the bytecode says, which is the compile-time type of the
+  receiver. `list.add(x)` on a variable declared as `List` is a call to `List.add`, even
+  if the object is an `ArrayList`.
+- Code inside a lambda is compiled into a separate synthetic method
+  (`lambda$checkout$0`). A call made there is not "inside" `checkout`; hook the synthetic
+  method by name if you need it. The same goes for Kotlin lambdas that are not inlined.
+- Ordinals count matching calls in bytecode order, which is normally source order.
+- The types in the called method's descriptor must be accessible from the calling class.
+  They almost always are; a public method that takes a package-private class of another
+  package is the exception, and a hooked call to it fails with `IllegalAccessError`.
+- An after-hook does not run when the call throws.
 
 **JDK classes**
 

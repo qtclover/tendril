@@ -31,6 +31,26 @@ instruction, exit code before each `xRETURN`. Arguments and return values are bo
 call and unboxed after it, with the right instructions for each of the eight primitive
 types, for `void`, and for `long`/`double` taking two local variable slots.
 
+A hooked call inside the method is wrapped in place. `price = pricing.priceOf(item, qty)`
+becomes:
+
+```java
+Object[] callArgs = { item, qty };
+Object call = Bridge.beforeCall(ctx, 4, pricing, callArgs);
+price = Bridge.skipped(call)
+        ? (int) Bridge.callResult(call)
+        : pricing.priceOf((String) callArgs[0], (int) callArgs[1]);
+price = (int) Bridge.afterCall(call, price);
+```
+
+When the weaver reaches the call instruction, the receiver and arguments are already on
+the operand stack. It moves them into fresh local variables, boxes the arguments into the
+array, and pushes them back for the real call. `4` identifies the call by its position
+among the call instructions of the method, which is stable because every transformation
+starts from the original class file. Whatever else is on the stack underneath stays put,
+including a half-constructed object when the call is a constructor argument, as in
+`new StringBuilder(decorate(text))`.
+
 ## 2. The dispatcher has to be visible from the hooked class
 
 `PlayerService` can only call `Bridge` if its class loader can find `Bridge`. For an

@@ -105,6 +105,70 @@ the class that declares it; every subclass that does not override it is affected
 - Values are checked against the real parameter and return types, so a mistake fails in
   your hook with a readable message instead of as a `ClassCastException` somewhere inside
   the target. Numbers are converted (`setArg(0, 5)` is fine for a `long` parameter).
+- `cancel()` and `setResult()` act on the hooked method and work at `HEAD` and `RETURN`
+  as in the table. At invoke points they throw; use `invoked()` instead (see below).
 - Whatever a hook throws comes out of the hooked method, as if the method had thrown it.
 - While a hook runs, calls it makes to the method it is hooking go straight to the method
   without running that method's hooks again. So a hook can call its own target safely.
+
+## Hooking a call inside a method
+
+`HEAD` and `RETURN` wrap a whole method. An invoke point wraps one call that the method
+makes. Given:
+
+```java
+public int checkout(String item, int quantity) {
+    int price = pricing.priceOf(item, quantity);
+    audit("sold " + item);
+    return price + shipping(price);
+}
+```
+
+```kotlin
+inject<Shop> {
+    method("checkout") {
+        atInvoke("Pricing.priceOf") { call ->
+            val invoked = call.invoked()
+            if (invoked.arg<Int>(1) > 100) invoked.setArg(1, 100)   // cap the quantity
+        }
+        afterInvoke("shipping") { it.invoked().result = 0 }          // free shipping
+        atInvoke("audit") { it.invoked().skip() }                    // do not log
+    }
+}
+```
+
+```java
+Injector.into(Shop.class).method("checkout")
+        .atInvoke("Pricing.priceOf", call -> call.invoked().setArg(1, 1));
+
+@Inject(target = Shop.class, method = "checkout", at = At.AFTER_INVOKE, invoke = "shipping")
+static void freeShipping(CallInfo call) {
+    call.invoked().setResult(0);
+}
+```
+
+`call` still describes the surrounding method (`checkout`, its `this`, its arguments).
+`call.invoked()` is the call inside it:
+
+| Member                  | At `INVOKE` (before the call)                  | At `AFTER_INVOKE`                    |
+|-------------------------|------------------------------------------------|--------------------------------------|
+| `receiver()`            | the object called on, `null` for a static call | same                                 |
+| `arg(i)`, `args()`      | the call's arguments                           | the arguments the call was made with |
+| `setArg(i, value)`      | the call is made with the new value            | not allowed                          |
+| `skip()`                | the call is not made; yields `null`/`0`/`false`| not allowed                          |
+| `setResult(v)` / `skip(v)` | the call is not made; yields `v`            | replaces what the call returned      |
+| `getResult()`           | what a previous hook set, else `null`          | what the call returned               |
+| `owner()`, `name()`, `descriptor()` | which method is being called       | same                                 |
+
+Which calls a hook applies to:
+
+| You write                         | It matches                                             |
+|-----------------------------------|--------------------------------------------------------|
+| `"priceOf"`                       | every call to a method named `priceOf`                 |
+| `"Pricing.priceOf"`               | only those on `Pricing` (simple or full class name)    |
+| `"priceOf(Ljava/lang/String;I)"`  | only that overload                                     |
+| `ordinal = 1`                     | of the matching calls, only the second                 |
+
+If nothing in the method matches, installing fails and the error lists the calls the
+method does make. A skip stops the remaining `INVOKE` hooks; `AFTER_INVOKE` hooks still
+run, with the substituted value. See [Limits](limits.md) for what cannot be matched.

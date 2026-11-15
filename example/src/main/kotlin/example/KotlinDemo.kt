@@ -34,7 +34,8 @@ fun main() {
             atReturn { call -> call.result = "${call.result} (hooked)" }
         }
         method("heal") {
-            atReturn { call -> call.result = -1 }
+            // heal() computes Math.min(100, health + amount): raise the cap for that one call.
+            atInvoke("Math.min") { call -> call.invoked().setArg(0, 150) }
         }
     }
 
@@ -42,11 +43,11 @@ fun main() {
     player.damage(60)
     player.damage(5)
     println("  title = ${player.title()}")
-    println("  heal(10) = ${player.heal(10)}")
+    println("  heal(500) = ${player.heal(500)}  (the cap of 100 inside heal() was raised to 150)")
 
     hooks.remove()
     println("\nHooks removed, original bytecode restored:")
     player.damage(60)
     println("  title = ${player.title()}")
-    println("  heal(10) = ${player.heal(10)}")
+    println("  heal(500) = ${player.heal(500)}")
 }

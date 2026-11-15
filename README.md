@@ -29,11 +29,25 @@ Injection hooks = Injector.register(Hooks.class);
 hooks.remove();
 ```
 
+Hooking one call inside a method instead of the whole method:
+
+```kotlin
+inject<Shop> {
+    method("checkout") {
+        // int price = pricing.priceOf(item, quantity);
+        atInvoke("Pricing.priceOf") { it.invoked().setArg(1, 1) }        // change an argument
+        afterInvoke("Pricing.priceOf") { it.invoked().result = 0 }       // or replace the result
+    }
+}
+```
+
 ## What a hook can do
 
-- Run at the **head** of a method or before every **return**.
+- Run at the **head** of a method, before every **return**, or around one particular
+  **call inside** the method.
 - **Cancel** the call, with or without a return value.
 - Read and **change arguments**, replace the **return value**, reach `this`.
+- For a call inside the method: change its arguments, **skip** it, or replace its result.
 - Target classes that are **already loaded** or that load later, including JDK classes.
 - Be **removed** at any time, which restores the exact original bytecode.
 
@@ -61,8 +75,8 @@ Needs Java 17 or newer.
 - Tendril loads its agent into the running JVM on first use. JDK 21+ prints a warning
   about that unless you pass `-XX:+EnableDynamicAgentLoading` or use
   `-javaagent:tendril-agent.jar` instead.
-- Hooks go at method head and return only. No constructors, no hooking a single call
-  inside a method, no field hooks yet.
+- Hooks go at method head, at returns and around calls. No constructors, no field hooks,
+  no hooks on thrown exceptions yet.
 - A hooked call boxes its arguments, so keep hooks out of hot inner loops.
 - This is v0.1. For production, use Byte Buddy.
 

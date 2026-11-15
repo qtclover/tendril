@@ -3,7 +3,7 @@
 |                         | Tendril                    | Byte Buddy                  | Mixin (SpongePowered)          | Javassist                    |
 |-------------------------|----------------------------|-----------------------------|--------------------------------|------------------------------|
 | Level                   | hooks on existing methods  | general code generation     | class patching for mods        | source-level bytecode editing |
-| Injection points        | head, return               | anything, incl. custom ASM  | head, return, invoke, field, constant, ... | anywhere, as Java source strings |
+| Injection points        | head, return, invoke       | anything, incl. custom ASM  | head, return, invoke, field, constant, ... | anywhere, as Java source strings |
 | Already-loaded classes  | yes                        | yes (`Advice` + agent)      | no, load time only             | yes, via `Instrumentation` or HotSwap |
 | Undo at run time        | yes, `Injection.remove()`  | yes, `ResettableClassFileTransformer` | no                  | manual                       |
 | Needs                   | nothing, or `-javaagent`   | `byte-buddy-agent` or `-javaagent` | a launcher/mod loader that hosts it | you supply the `Instrumentation` |
@@ -28,5 +28,5 @@
 - **[InjectAPI](https://github.com/Sunderw3k/InjectAPI)** is the closest in spirit: a small
   Kotlin library on ASM for hooking at run time. It works one level lower. You write the
   agent yourself, name methods by descriptor, and capture arguments by opcode and local
-  variable slot. In return it has an invoke injection point, which Tendril does not have
-  yet. Tendril attaches itself, addresses arguments by index, and can undo a hook.
+  variable slot. Both offer head, return and invoke points. Tendril attaches itself,
+  addresses arguments by index, and can undo a hook.
