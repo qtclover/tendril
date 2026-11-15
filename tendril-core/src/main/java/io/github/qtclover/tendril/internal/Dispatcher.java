@@ -73,7 +73,7 @@ final class Dispatcher implements Bridge.Handler {
             return null;
         }
         InjectionImpl[] hooks = site.head;
-        if (hooks.length == 0 && site.ret.length == 0) {
+        if (hooks.length == 0 && site.ret.length == 0 && site.invokeHooks == 0) {
             return null;
         }
         Guard guard = GUARD.get();
@@ -82,7 +82,7 @@ final class Dispatcher implements Bridge.Handler {
         }
         CallInfoImpl call = new CallInfoImpl(site, owner, self, args);
         if (hooks.length > 0) {
-            run(hooks, call, guard, true);
+            run(hooks, call, guard, STOP_ON_CANCEL);
         }
         return call;
     }
@@ -106,11 +106,62 @@ final class Dispatcher implements Bridge.Handler {
         }
         call.at = At.RETURN;
         call.result = result;
-        run(hooks, call, GUARD.get(), false);
+        run(hooks, call, GUARD.get(), RUN_ALL);
         return call.result;
     }
 
-    private static void run(InjectionImpl[] hooks, CallInfoImpl call, Guard guard, boolean stopOnCancel) {
+    @Override
+    public Object beforeCall(Object context, int pointId, Object receiver, Object[] args) {
+        InvokePoint point = registry.point(pointId);
+        if (point == null) {
+            return null;
+        }
+        InjectionImpl[] hooks = point.before;
+        if (hooks.length == 0 && point.after.length == 0) {
+            return null;
+        }
+        CallInfoImpl call = (CallInfoImpl) context;
+        InvokedCallImpl invoked = new InvokedCallImpl(point, call.owner(), receiver, args);
+        if (hooks.length > 0) {
+            call.at = At.INVOKE;
+            call.invoked = invoked;
+            run(hooks, call, GUARD.get(), STOP_ON_SKIP);
+        }
+        invoked.call = call;
+        return invoked;
+    }
+
+    @Override
+    public boolean skipped(Object callContext) {
+        return ((InvokedCallImpl) callContext).skipped;
+    }
+
+    @Override
+    public Object callResult(Object callContext) {
+        return ((InvokedCallImpl) callContext).result;
+    }
+
+    @Override
+    public Object afterCall(Object callContext, Object result) {
+        InvokedCallImpl invoked = (InvokedCallImpl) callContext;
+        InjectionImpl[] hooks = invoked.point.after;
+        if (hooks.length == 0) {
+            return result;
+        }
+        CallInfoImpl call = invoked.call;
+        invoked.after = true;
+        invoked.result = result;
+        call.at = At.AFTER_INVOKE;
+        call.invoked = invoked;
+        run(hooks, call, GUARD.get(), RUN_ALL);
+        return invoked.result;
+    }
+
+    private static final int RUN_ALL = 0;
+    private static final int STOP_ON_CANCEL = 1;
+    private static final int STOP_ON_SKIP = 2;
+
+    private static void run(InjectionImpl[] hooks, CallInfoImpl call, Guard guard, int mode) {
         guard.push(call.site.id);
         try {
             for (InjectionImpl injection : hooks) {
@@ -118,12 +169,15 @@ final class Dispatcher implements Bridge.Handler {
                     continue;
                 }
                 injection.hook.handle(call);
-                if (stopOnCancel && call.cancelled) {
+                if (mode == STOP_ON_CANCEL && call.cancelled) {
+                    break;
+                }
+                if (mode == STOP_ON_SKIP && call.invoked.skipped) {
                     break;
                 }
             }
         } catch (Throwable t) {
-            throw CallInfoImpl.<RuntimeException>sneaky(t);
+            throw Values.<RuntimeException>sneaky(t);
         } finally {
             guard.pop();
         }

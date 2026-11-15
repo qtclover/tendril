@@ -11,14 +11,21 @@ public final class InjectionImpl {
     /** Full descriptor, parameter-only descriptor, or null for any overload. */
     final String descriptor;
     final At at;
+    /** Which calls inside the method; null unless {@link #at} is an invoke point. */
+    final CallSelector invoke;
+    /** Which of the matching calls, counted from 0 within each method; negative for all. */
+    final int ordinal;
     final Hook hook;
     volatile boolean active = true;
 
-    public InjectionImpl(String classInternalName, String methodName, String descriptor, At at, Hook hook) {
+    public InjectionImpl(String classInternalName, String methodName, String descriptor, At at,
+                         CallSelector invoke, int ordinal, Hook hook) {
         this.classInternalName = classInternalName;
         this.methodName = methodName;
         this.descriptor = descriptor;
         this.at = at;
+        this.invoke = invoke;
+        this.ordinal = ordinal;
         this.hook = hook;
     }
 

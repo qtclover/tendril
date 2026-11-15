@@ -13,7 +13,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -32,6 +31,7 @@ public final class Registry implements ClassFileTransformer {
     private final Instrumentation instrumentation;
     private final Map<String, ClassPlan> plans = new ConcurrentHashMap<>();
     private volatile Site[] sites = new Site[0];
+    private volatile InvokePoint[] points = new InvokePoint[0];
 
     private Registry(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
@@ -60,6 +60,19 @@ public final class Registry implements ClassFileTransformer {
     Site site(int id) {
         Site[] table = sites;
         return id >= 0 && id < table.length ? table[id] : null;
+    }
+
+    InvokePoint point(int id) {
+        InvokePoint[] table = points;
+        return id >= 0 && id < table.length ? table[id] : null;
+    }
+
+    synchronized InvokePoint newPoint(Site site, int index, CallRef call) {
+        InvokePoint[] table = Arrays.copyOf(points, points.length + 1);
+        InvokePoint point = new InvokePoint(table.length - 1, site, index, call);
+        table[point.id] = point;
+        points = table;
+        return point;
     }
 
     synchronized Site newSite(String owner, String name, String desc) {
@@ -108,9 +121,7 @@ public final class Registry implements ClassFileTransformer {
                 }
                 for (InjectionImpl injection : entry.getValue()) {
                     if (Boolean.FALSE.equals(plan.matchesAnything(injection))) {
-                        throw new InjectionException("No hookable method matches " + injection.describe()
-                                + ". Only methods declared in the class itself, with a body, can be hooked. "
-                                + "Candidates: " + new TreeSet<>(plan.knownMethods()));
+                        throw new InjectionException(plan.explainNoMatch(injection));
                     }
                 }
             }
@@ -248,10 +259,10 @@ public final class Registry implements ClassFileTransformer {
         }
         try {
             ClassReader reader = new ClassReader(classfileBuffer);
-            Set<String> methods = Weaver.hookableMethods(reader);
+            Map<String, List<CallRef>> methods = Weaver.scan(reader);
             while (true) {
                 int version = plan.version();
-                Map<String, Site> sitesToWeave = plan.planWeave(methods, this);
+                Map<String, ClassPlan.Weave> sitesToWeave = plan.planWeave(methods, this);
                 // Returning null means "leave the class as it is", which for a
                 // re-transformation means the original bytes: that is the undo.
                 byte[] result = sitesToWeave.isEmpty() ? null : Weaver.weave(reader, loader, sitesToWeave);
@@ -260,8 +271,8 @@ public final class Registry implements ClassFileTransformer {
                         // First load: install() could not check the method names
                         // back then, so a typo would otherwise go unnoticed.
                         for (InjectionImpl injection : plan.unmatched()) {
-                            System.err.println("[tendril] warning: no hookable method matches "
-                                    + injection.describe() + "; that hook will never run");
+                            System.err.println("[tendril] warning: " + plan.explainNoMatch(injection)
+                                    + " That hook will never run.");
                         }
                     }
                     return result;

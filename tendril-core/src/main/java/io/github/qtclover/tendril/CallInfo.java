@@ -52,13 +52,14 @@ public interface CallInfo {
      * Sets the return value. At {@link At#HEAD} this also cancels the call, so the
      * method body never runs. At {@link At#RETURN} it replaces the value being returned.
      *
-     * @throws IllegalStateException    if the method returns void
+     * @throws IllegalStateException    if the method returns void, or at an invoke point
      * @throws IllegalArgumentException if the value does not fit the return type
      */
     void setResult(Object value);
 
     /**
-     * Skips the method body. Only valid at {@link At#HEAD}. A non-void method returns
+     * Skips the method body. Only valid at {@link At#HEAD}: leaving a method from the
+     * middle would jump over its {@code finally} blocks and monitor exits. A non-void method returns
      * {@code null}, {@code 0} or {@code false} unless a result has been set.
      * Remaining head hooks and all return hooks are skipped too.
      */
@@ -71,4 +72,12 @@ public interface CallInfo {
 
     /** True once the call has been cancelled. */
     boolean isCancelled();
+
+    /**
+     * The call this hook is attached to, inside the hooked method. Everything else on
+     * {@code CallInfo} keeps describing the surrounding method.
+     *
+     * @throws IllegalStateException at {@link At#HEAD} and {@link At#RETURN}
+     */
+    InvokedCall invoked();
 }

@@ -31,7 +31,28 @@ public final class Bridge {
 
         /** Runs return hooks. Returns the (possibly replaced) boxed return value. */
         Object exit(Object context, Object result);
+
+        /**
+         * Runs the hooks placed before a call inside a hooked method. Returns an opaque
+         * per-call-site context, or null when nothing is hooked there.
+         */
+        Object beforeCall(Object context, int point, Object receiver, Object[] args);
+
+        /** True when a hook asked for the call not to be made. */
+        boolean skipped(Object callContext);
+
+        /** The boxed value to use in place of a skipped call's result. */
+        Object callResult(Object callContext);
+
+        /** Runs the hooks placed after a call. Returns the (possibly replaced) boxed result. */
+        Object afterCall(Object callContext, Object result);
     }
+
+    /**
+     * Bumped whenever this class changes shape, so that the core can refuse to work
+     * with an agent jar from a different release instead of failing inside woven code.
+     */
+    public static final int VERSION = 2;
 
     /** Set once by {@link Agent}. */
     public static volatile Instrumentation instrumentation;
@@ -72,5 +93,34 @@ public final class Bridge {
         }
         Handler h = handler;
         return h == null ? result : h.exit(context, result);
+    }
+
+    public static Object beforeCall(Object context, int point, Object receiver, Object[] args) {
+        if (context == null) {
+            return null;
+        }
+        Handler h = handler;
+        return h == null ? null : h.beforeCall(context, point, receiver, args);
+    }
+
+    public static boolean skipped(Object callContext) {
+        if (callContext == null) {
+            return false;
+        }
+        Handler h = handler;
+        return h != null && h.skipped(callContext);
+    }
+
+    public static Object callResult(Object callContext) {
+        Handler h = handler;
+        return h == null ? null : h.callResult(callContext);
+    }
+
+    public static Object afterCall(Object callContext, Object result) {
+        if (callContext == null) {
+            return result;
+        }
+        Handler h = handler;
+        return h == null ? result : h.afterCall(callContext, result);
     }
 }

@@ -36,4 +36,13 @@ public @interface Inject {
     String descriptor() default "";
 
     At at() default At.HEAD;
+
+    /**
+     * For {@link At#INVOKE} and {@link At#AFTER_INVOKE}: the call inside the method to
+     * hook, as {@code "name"}, {@code "Owner.name"}, or either followed by a descriptor.
+     */
+    String invoke() default "";
+
+    /** With {@link #invoke()}: which of the matching calls, counted from 0. Negative means all. */
+    int ordinal() default -1;
 }

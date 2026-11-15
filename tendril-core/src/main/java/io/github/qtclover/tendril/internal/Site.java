@@ -16,6 +16,8 @@ final class Site {
 
     volatile InjectionImpl[] head = NONE;
     volatile InjectionImpl[] ret = NONE;
+    /** Number of hooks on calls inside this method. */
+    volatile int invokeHooks;
 
     Site(int id, String owner, String name, String desc) {
         this.id = id;
@@ -25,6 +27,6 @@ final class Site {
     }
 
     boolean hasHooks() {
-        return head.length > 0 || ret.length > 0;
+        return head.length > 0 || ret.length > 0 || invokeHooks > 0;
     }
 }

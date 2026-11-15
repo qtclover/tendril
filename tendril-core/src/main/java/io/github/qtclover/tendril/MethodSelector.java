@@ -23,6 +23,33 @@ public final class MethodSelector {
         return at(At.RETURN, hook);
     }
 
+    /**
+     * Runs {@code hook} just before every call to {@code call} inside the method.
+     * The hook gets at the call through {@link CallInfo#invoked()}.
+     *
+     * @param call {@code "name"}, {@code "Owner.name"}, or either followed by a descriptor
+     */
+    public Injection atInvoke(String call, Hook hook) {
+        return atInvoke(call, -1, hook);
+    }
+
+    /** Like {@link #atInvoke(String, Hook)}, for only the {@code ordinal}-th matching call (from 0). */
+    public Injection atInvoke(String call, int ordinal, Hook hook) {
+        return Injector.batch().add(className, methodName, descriptor, At.INVOKE, call, ordinal, hook).install();
+    }
+
+    /** Runs {@code hook} just after every call to {@code call} inside the method returns. */
+    public Injection afterInvoke(String call, Hook hook) {
+        return afterInvoke(call, -1, hook);
+    }
+
+    /** Like {@link #afterInvoke(String, Hook)}, for only the {@code ordinal}-th matching call (from 0). */
+    public Injection afterInvoke(String call, int ordinal, Hook hook) {
+        return Injector.batch().add(className, methodName, descriptor, At.AFTER_INVOKE, call, ordinal, hook)
+                .install();
+    }
+
+    /** For {@link At#HEAD} and {@link At#RETURN}; invoke points need a call, see {@link #atInvoke}. */
     public Injection at(At at, Hook hook) {
         return Injector.batch().add(className, methodName, descriptor, at, hook).install();
     }

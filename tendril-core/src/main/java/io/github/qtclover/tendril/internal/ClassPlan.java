@@ -10,18 +10,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /** Everything Tendril knows about one target class (by name). All state is guarded by {@code this}. */
 final class ClassPlan {
 
+    /** What to weave into one method: its site, and the calls inside it to wrap, by call index. */
+    record Weave(Site site, Map<Integer, InvokePoint> points) {
+    }
+
     final String internalName;
 
     private final List<InjectionImpl> injections = new ArrayList<>();
-    /** Keyed by method name + descriptor. Sites are never removed, only emptied. */
+    /** Keyed by method name + descriptor. Sites and points are never removed, only emptied. */
     private final Map<String, Site> sites = new HashMap<>();
-    /** Hookable methods of the class as last seen by the transformer; null until then. */
-    private Set<String> methods;
-    /** Methods that carry woven code in the currently defined class. */
+    /** Keyed by method key + '#' + call index. */
+    private final Map<String, InvokePoint> points = new HashMap<>();
+    /** Hookable methods of the class and the calls each makes, as last seen by the transformer; null until then. */
+    private Map<String, List<CallRef>> methods;
+    /** Method keys and point keys that carry woven code in the currently defined class. */
     private Set<String> woven = Set.of();
     /** Bumped on every change, so the transformer can tell its snapshot went stale. */
     private int version;
@@ -53,39 +60,28 @@ final class ClassPlan {
         return version;
     }
 
-    synchronized boolean isEmpty() {
-        return injections.isEmpty();
-    }
-
     /** True if the class as currently defined lacks woven code it should have, or has code it no longer needs. */
     synchronized boolean outOfDate() {
         if (methods == null) {
             return !injections.isEmpty();
         }
-        Set<String> wanted = new HashSet<>();
-        for (String key : methods) {
-            if (wantsHooks(key)) {
-                wanted.add(key);
-            }
-        }
-        return !wanted.equals(woven);
+        return !wanted().equals(woven);
     }
 
-    /** Whether {@code injection} matches a method of the class. Null if the class has not been seen yet. */
+    /** Whether {@code injection} has anywhere to go in the class. Null if the class has not been seen yet. */
     synchronized Boolean matchesAnything(InjectionImpl injection) {
         if (methods == null) {
             return null;
         }
-        for (String key : methods) {
-            int split = key.indexOf('(');
-            if (injection.matches(key.substring(0, split), key.substring(split))) {
+        for (String key : methods.keySet()) {
+            if (applies(injection, key)) {
                 return true;
             }
         }
         return false;
     }
 
-    /** Active injections that match no method of the class as last seen. */
+    /** Active injections that have nowhere to go in the class as last seen. */
     synchronized List<InjectionImpl> unmatched() {
         List<InjectionImpl> result = new ArrayList<>();
         for (InjectionImpl injection : injections) {
@@ -96,20 +92,43 @@ final class ClassPlan {
         return result;
     }
 
-    synchronized Set<String> knownMethods() {
-        return methods == null ? Set.of() : Set.copyOf(methods);
+    /** Why {@code injection} matched nothing, with the alternatives that do exist. */
+    synchronized String explainNoMatch(InjectionImpl injection) {
+        Set<String> calls = new TreeSet<>();
+        boolean methodFound = false;
+        for (Map.Entry<String, List<CallRef>> method : methods.entrySet()) {
+            if (matchesMethod(injection, method.getKey())) {
+                methodFound = true;
+                for (CallRef call : method.getValue()) {
+                    if (!call.name().startsWith("<")) {
+                        calls.add(call.describe());
+                    }
+                }
+            }
+        }
+        if (methodFound && injection.invoke != null) {
+            return "No call matching \"" + injection.invoke + "\""
+                    + (injection.ordinal >= 0 ? " with ordinal " + injection.ordinal : "")
+                    + " in " + injection.describe() + ". Calls made there: " + calls;
+        }
+        return "No hookable method matches " + injection.describe()
+                + ". Only methods declared in the class itself, with a body, can be hooked. "
+                + "Candidates: " + new TreeSet<>(methods.keySet());
     }
 
     /**
      * Called by the transformer with the hookable methods of the class it is about to
-     * define. Returns the site for each method that needs weaving, and records that
+     * define. Returns what to weave into each method that needs it, and records that
      * decision as the new state of the class.
      */
-    synchronized Map<String, Site> planWeave(Set<String> hookableMethods, Registry registry) {
+    synchronized Map<String, Weave> planWeave(Map<String, List<CallRef>> hookableMethods, Registry registry) {
         methods = hookableMethods;
-        Map<String, Site> result = new LinkedHashMap<>();
-        for (String key : hookableMethods) {
-            if (!wantsHooks(key)) {
+        Map<String, Weave> result = new LinkedHashMap<>();
+        Set<String> nowWoven = new HashSet<>();
+        for (Map.Entry<String, List<CallRef>> method : hookableMethods.entrySet()) {
+            String key = method.getKey();
+            Set<Integer> calls = wantedCalls(key);
+            if (calls.isEmpty() && !wantsMethodHooks(key)) {
                 continue;
             }
             Site site = sites.get(key);
@@ -117,11 +136,24 @@ final class ClassPlan {
                 int split = key.indexOf('(');
                 site = registry.newSite(internalName, key.substring(0, split), key.substring(split));
                 sites.put(key, site);
-                fill(site);
             }
-            result.put(key, site);
+            fill(site);
+            nowWoven.add(key);
+            Map<Integer, InvokePoint> wrapped = new HashMap<>();
+            for (int index : calls) {
+                String pointKey = key + "#" + index;
+                InvokePoint point = points.get(pointKey);
+                if (point == null) {
+                    point = registry.newPoint(site, index, method.getValue().get(index));
+                    points.put(pointKey, point);
+                }
+                fill(point);
+                wrapped.put(index, point);
+                nowWoven.add(pointKey);
+            }
+            result.put(key, new Weave(site, wrapped));
         }
-        woven = Set.copyOf(result.keySet());
+        woven = nowWoven;
         return result;
     }
 
@@ -129,34 +161,114 @@ final class ClassPlan {
         woven = Set.of();
     }
 
-    private boolean wantsHooks(String key) {
+    // ---- matching ----------------------------------------------------------
+
+    private static boolean matchesMethod(InjectionImpl injection, String key) {
         int split = key.indexOf('(');
-        String name = key.substring(0, split);
-        String desc = key.substring(split);
+        return injection.matches(key.substring(0, split), key.substring(split));
+    }
+
+    /** Indices of the calls in a method that an invoke injection selects. */
+    private Set<Integer> callIndices(InjectionImpl injection, String key) {
+        if (injection.invoke == null || !matchesMethod(injection, key)) {
+            return Set.of();
+        }
+        Set<Integer> result = new HashSet<>();
+        List<CallRef> calls = methods.get(key);
+        if (calls == null) {
+            return Set.of();
+        }
+        int seen = 0;
+        for (int i = 0; i < calls.size(); i++) {
+            if (injection.invoke.matches(calls.get(i))) {
+                if (injection.ordinal < 0 || injection.ordinal == seen) {
+                    result.add(i);
+                }
+                seen++;
+            }
+        }
+        return result;
+    }
+
+    private boolean applies(InjectionImpl injection, String key) {
+        return injection.invoke == null ? matchesMethod(injection, key) : !callIndices(injection, key).isEmpty();
+    }
+
+    private boolean wantsMethodHooks(String key) {
         for (InjectionImpl injection : injections) {
-            if (injection.matches(name, desc)) {
+            if (injection.invoke == null && matchesMethod(injection, key)) {
                 return true;
             }
         }
         return false;
     }
 
+    private Set<Integer> wantedCalls(String key) {
+        Set<Integer> result = new HashSet<>();
+        for (InjectionImpl injection : injections) {
+            result.addAll(callIndices(injection, key));
+        }
+        return result;
+    }
+
+    private Set<String> wanted() {
+        Set<String> result = new HashSet<>();
+        for (String key : methods.keySet()) {
+            Set<Integer> calls = wantedCalls(key);
+            if (!calls.isEmpty() || wantsMethodHooks(key)) {
+                result.add(key);
+            }
+            for (int index : calls) {
+                result.add(key + "#" + index);
+            }
+        }
+        return result;
+    }
+
+    // ---- hook tables -------------------------------------------------------
+
     private void rebuild() {
         version++;
+        if (methods == null) {
+            return;
+        }
         for (Site site : sites.values()) {
             fill(site);
+        }
+        for (InvokePoint point : points.values()) {
+            fill(point);
         }
     }
 
     private void fill(Site site) {
+        String key = site.name + site.desc;
         List<InjectionImpl> head = new ArrayList<>();
         List<InjectionImpl> ret = new ArrayList<>();
+        int invokeHooks = 0;
         for (InjectionImpl injection : injections) {
-            if (injection.matches(site.name, site.desc)) {
+            if (injection.invoke != null) {
+                if (!callIndices(injection, key).isEmpty()) {
+                    invokeHooks++;
+                }
+            } else if (matchesMethod(injection, key)) {
                 (injection.at == At.HEAD ? head : ret).add(injection);
             }
         }
-        site.head = head.isEmpty() ? Site.NONE : head.toArray(Site.NONE);
-        site.ret = ret.isEmpty() ? Site.NONE : ret.toArray(Site.NONE);
+        site.head = head.toArray(Site.NONE);
+        site.ret = ret.toArray(Site.NONE);
+        site.invokeHooks = invokeHooks;
+    }
+
+    private void fill(InvokePoint point) {
+        String key = point.site.name + point.site.desc;
+        List<InjectionImpl> before = new ArrayList<>();
+        List<InjectionImpl> after = new ArrayList<>();
+        for (InjectionImpl injection : injections) {
+            if (callIndices(injection, key).contains(point.index)) {
+                (injection.at == At.INVOKE ? before : after).add(injection);
+            }
+        }
+        point.before = before.toArray(Site.NONE);
+        point.after = after.toArray(Site.NONE);
     }
 }

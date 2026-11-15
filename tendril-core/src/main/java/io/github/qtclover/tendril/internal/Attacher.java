@@ -70,12 +70,29 @@ public final class Attacher {
         return found;
     }
 
+    /** Must equal {@code Bridge.VERSION} in the agent jar this core was built with. */
+    private static final int BRIDGE_VERSION = 2;
+
     private static Instrumentation findInstalledAgent() {
+        Class<?> bridge;
         try {
-            Class<?> bridge = Class.forName(BRIDGE, false, null);
-            return (Instrumentation) bridge.getField("instrumentation").get(null);
+            bridge = Class.forName(BRIDGE, false, null);
         } catch (ClassNotFoundException e) {
             return null;
+        }
+        int version;
+        try {
+            version = bridge.getField("VERSION").getInt(null);
+        } catch (ReflectiveOperationException e) {
+            version = 1; // The first release had no version field.
+        }
+        if (version != BRIDGE_VERSION) {
+            throw new InjectionException("The tendril-agent jar loaded into this JVM (bridge version " + version
+                    + ") does not match this tendril-core (bridge version " + BRIDGE_VERSION
+                    + "). Use the agent jar from the same release.");
+        }
+        try {
+            return (Instrumentation) bridge.getField("instrumentation").get(null);
         } catch (ReflectiveOperationException e) {
             throw new InjectionException("Incompatible tendril-agent on the bootstrap class path", e);
         }
