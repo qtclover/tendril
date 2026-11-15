@@ -153,7 +153,7 @@ public final class Attacher {
                 return null;
             }
             return Boolean.valueOf(option.getValue());
-        } catch (Throwable notHotSpotOrOlderThan21) {
+        } catch (Throwable notHotSpot) {
             return null;
         }
     }
