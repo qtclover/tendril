@@ -63,7 +63,8 @@ mark the ones that cannot be touched (anything before a constructor's `super(...
 returns), and to read which local variables are in scope at each of them.
 
 A direct hook skips all of this. It is woven as `Hooks.onDamage(this, amount)`: load the
-receiver and arguments, `invokestatic`. Because that lives in the bytecode rather than
+receiver and arguments, `invokestatic`. A method with only direct hooks gets nothing
+else, no context and no call into the bridge. Because that lives in the bytecode rather than
 in a table, adding or removing one always re-transforms the class.
 
 ## 2. The dispatcher has to be visible from the hooked class

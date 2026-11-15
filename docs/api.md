@@ -294,8 +294,9 @@ public final class Metrics {
 }
 ```
 
-It is called straight from the target method, several times cheaper than an
-ordinary hook (see [benchmarks](benchmarks.md)). In exchange it can only observe, exists
+It is called straight from the target method. A method that has only direct hooks never
+touches the dispatcher, which makes them more than ten times cheaper than an ordinary
+hook (see [benchmarks](benchmarks.md)). In exchange it can only observe, exists
 for `HEAD` and `RETURN` only, needs a loaded target class given as `target = X.class`,
 and the hook class must be public and visible from the target's class loader, which
 rules out JDK classes. The overload hooked follows from the parameter types. The fluent

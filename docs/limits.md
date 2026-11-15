@@ -82,6 +82,8 @@ What Tendril cannot do, or does in a way you should know about.
 
 - A hooked call allocates an `Object[]` and a small context object and boxes primitive
   arguments. That is fine for most code and wrong for a hot inner loop.
+- Once a hook has thrown during a call, throw hooks stay silent for the rest of that
+  call, even if the method caught the hook's exception and later throws one of its own.
 - An exception thrown by a hook propagates out of the hooked method. A return hook's
   exception can be caught by the method's own enclosing `try`/`finally`.
 - If the superclass of a type cannot be found as a `.class` resource (classes generated at

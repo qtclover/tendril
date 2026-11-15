@@ -16,7 +16,11 @@ import java.util.TreeSet;
 final class ClassPlan {
 
     /** What to weave into one method: its site, and the calls inside it to wrap, by call index. */
-    record Weave(Site site, Map<Integer, InvokePoint> points, int instructionCount,
+    /**
+     * @param wrapped false if the method has direct hooks only: then it gets nothing but
+     *                the direct calls, and never touches the bridge
+     */
+    record Weave(Site site, Map<Integer, InvokePoint> points, int instructionCount, boolean wrapped,
                  List<DirectHook> directHead, List<DirectHook> directReturn) {
     }
 
@@ -160,7 +164,12 @@ final class ClassPlan {
                 }
             }
             nowWoven.addAll(directKeys(key));
-            result.put(key, new Weave(site, wrapped, method.getValue().size(), directHead, directReturn));
+            boolean needsWrapper = !calls.isEmpty() || wantsOrdinaryHooks(key);
+            if (needsWrapper) {
+                nowWoven.add(key + "!wrapped");
+            }
+            result.put(key, new Weave(site, wrapped, method.getValue().size(), needsWrapper,
+                    directHead, directReturn));
         }
         woven = nowWoven;
         return result;
@@ -206,6 +215,16 @@ final class ClassPlan {
     private boolean wantsMethodHooks(String key) {
         for (InjectionImpl injection : injections) {
             if (injection.invoke == null && matchesMethod(injection, key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the method has a head, return or throw hook that goes through the dispatcher. */
+    private boolean wantsOrdinaryHooks(String key) {
+        for (InjectionImpl injection : injections) {
+            if (injection.invoke == null && injection.direct == null && matchesMethod(injection, key)) {
                 return true;
             }
         }
@@ -263,6 +282,9 @@ final class ClassPlan {
             if (!calls.isEmpty() || wantsMethodHooks(key)) {
                 result.add(key);
                 result.addAll(directKeys(key));
+                if (!calls.isEmpty() || wantsOrdinaryHooks(key)) {
+                    result.add(key + "!wrapped");
+                }
             }
             for (int index : calls) {
                 result.add(key + "#" + index + (wantsLocals(key, index) ? "+locals" : ""));

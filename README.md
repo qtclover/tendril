@@ -98,7 +98,7 @@ java -jar tendril-agent-all-0.2.0.jar detach 12345
 
 - Tendril loads its agent into the running JVM on first use. JDK 21+ prints a warning
   about that unless you pass `-XX:+EnableDynamicAgentLoading` or use `-javaagent`.
-- An ordinary hook costs about 7 to 25 ns per call, a direct hook about 3 ns.
+- An ordinary hook costs about 7 to 26 ns per call, a direct hook well under 1 ns.
 - No static initialisers, no `invokedynamic` call sites, and a method can only be
   cancelled at its head. The [limits](docs/limits.md) page has the full list.
 - This is v0.2 and young. For production, use Byte Buddy.

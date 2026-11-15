@@ -76,6 +76,32 @@ class DirectTest {
     }
 
     @Test
+    void aMethodWithOnlyDirectHooksNeverTouchesTheBridge() throws Exception {
+        byte[] original = TestSupport.currentBytes(PlayerService.class);
+        Injection direct = Injector.into(PlayerService.class).method("add")
+                .direct(At.RETURN, DirectHooks.class, "afterAdd");
+        byte[] directOnly = TestSupport.currentBytes(PlayerService.class);
+        assertTrue(mentions(directOnly, "DirectHooks"));
+        assertTrue(!mentions(directOnly, "tendril/agent/Bridge"), "no dispatcher code for a direct-only method");
+
+        // The first ordinary hook brings the wrapper in, the last one leaving takes it out again.
+        Injection ordinary = Injector.into(PlayerService.class).method("add").atHead(call -> { });
+        assertTrue(mentions(TestSupport.currentBytes(PlayerService.class), "tendril/agent/Bridge"));
+        assertEquals(5, player.add(2, 3));
+        ordinary.remove();
+        assertArrayEquals(directOnly, TestSupport.currentBytes(PlayerService.class));
+        assertEquals(5, player.add(2, 3));
+        assertEquals(List.of("2+3=5", "2+3=5"), DirectHooks.seen);
+
+        direct.remove();
+        assertArrayEquals(original, TestSupport.currentBytes(PlayerService.class));
+    }
+
+    private static boolean mentions(byte[] classFile, String text) {
+        return new String(classFile, java.nio.charset.StandardCharsets.ISO_8859_1).contains(text);
+    }
+
+    @Test
     void constructorsAndAnnotations() {
         Injector.into(Widgets.Widget.class).constructor().direct(At.HEAD, DirectHooks.class, "onWidget");
         Injection annotated = Injector.register(DirectHooks.Annotated.class);

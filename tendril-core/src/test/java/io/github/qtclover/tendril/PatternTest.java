@@ -109,7 +109,10 @@ class PatternTest {
 
     @Test
     void jdkClassesAndTendrilItselfNeverMatchAPattern() {
-        Injection everything = Injector.intoMatching("*").method("toString").atHead(call -> call.cancel("hooked"));
+        Injection everything = Injector.batch()
+                .add("java.util.*", "toString", null, At.HEAD, call -> call.cancel("hooked"))
+                .add("io.github.qtclover.tendril.A*", "toString", null, At.HEAD, call -> call.cancel("hooked"))
+                .install();
         Injection lists = Injector.intoSubtypes(List.class).method("size").atHead(call -> call.cancel(99));
 
         assertEquals("[1]", List.of(1).toString());

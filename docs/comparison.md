@@ -32,5 +32,5 @@
   addresses arguments by index, and can undo a hook.
 
 Where Byte Buddy inlines advice into the target, Tendril's ordinary hooks go through a
-dispatcher, which costs 7 to 25 ns per call. Its direct hooks are a plain static call
-and cost about 3 ns, but can only observe. See [benchmarks](benchmarks.md).
+dispatcher, which costs 7 to 26 ns per call. Its direct hooks are a plain static call
+that the JIT inlines, costing well under a nanosecond, but they can only observe. See [benchmarks](benchmarks.md).

@@ -3,22 +3,23 @@
 What a call costs once it is hooked. The hooks do nothing, so this is Tendril's own
 overhead. Each scenario has its own copy of the same method, `int add(int a, int b)`.
 
-| Scenario                                    | Time per call | 
+| Scenario                                    | Time per call |
 |---------------------------------------------|--------------:|
 | No hook (baseline)                          |        0.5 ns |
-| Direct hook at head                         |        2.9 ns |
-| Throw hook, no exception thrown             |        4.8 ns |
-| Head hook                                   |        7.0 ns |
-| Head hook and return hook                   |       14.0 ns |
-| Head hook that reads an argument            |       17.7 ns |
-| Return hook that replaces the result        |       26.5 ns |
-| Hook on a call inside the method            |       24.4 ns |
-| Hook on a field read inside the method      |       22.8 ns |
+| Direct hook at head                         |        0.6 ns |
+| Throw hook, no exception thrown             |        4.7 ns |
+| Head hook                                   |        6.8 ns |
+| Head hook and return hook                   |       13.1 ns |
+| Head hook that reads an argument            |       18.4 ns |
+| Return hook that replaces the result        |       25.9 ns |
+| Hook on a call inside the method            |       25.0 ns |
+| Hook on a field read inside the method      |       22.5 ns |
 
 Measured with JMH 1.37 (average time, 4 warm-up and 6 measurement iterations of one
 second, one fork) on an AMD Ryzen 9 5900X, OpenJDK 25.0.5, Linux. The error reported by
-JMH was below 7% for every row. Raw numbers are whatever your machine says; the ratios
-are the point.
+JMH was below 4% for every row. The arguments and results are outside the `Integer`
+cache, so boxing them is not free. Raw numbers are whatever your machine says; the
+ratios are the point.
 
 ## Reading the numbers
 
@@ -32,10 +33,11 @@ are the point.
 - **A point inside a method costs more than one on the method**, because the method
   gets its head code as well and the call or field access gets its own argument array
   and context object.
-- **A direct hook costs about 2.5 ns over the baseline**: it is a plain static call with
-  the real arguments, which the JIT can inline. (The benchmark's direct hook increments a
-  static counter so that it cannot be optimised away entirely.) Use these when a method
-  is called millions of times a second; see [Using Tendril](api.md).
+- **A direct hook costs about a tenth of a nanosecond here**: a method with only direct
+  hooks gets nothing but a plain static call with the real arguments, which the JIT
+  inlines. (The benchmark's direct hook increments a static counter so that it cannot be
+  optimised away entirely.) Use these when a method is called millions of times a
+  second; see [Using Tendril](api.md).
 - **A throw hook that never fires** still pays for the head code, since that is what
   creates the context the hook would need.
 

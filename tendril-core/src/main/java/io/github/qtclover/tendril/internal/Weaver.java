@@ -220,6 +220,7 @@ final class Weaver {
         private final Map<Integer, InvokePoint> points;
         private int contextLocal;
         private final int instructionCount;
+        private final boolean wrapped;
         private final List<DirectHook> directHead;
         private final List<DirectHook> directReturn;
         private int callIndex;
@@ -230,6 +231,7 @@ final class Weaver {
             this.siteId = weave.site().id;
             this.points = weave.points();
             this.instructionCount = weave.instructionCount();
+            this.wrapped = weave.wrapped();
             this.directHead = weave.directHead();
             this.directReturn = weave.directReturn();
             this.owner = owner;
@@ -240,6 +242,11 @@ final class Weaver {
 
         @Override
         protected void onMethodEnter() {
+            if (!wrapped) {
+                // Direct hooks only: no context, no boxing, no bridge.
+                callDirectHeadHooks();
+                return;
+            }
             int argsLocal = newLocal(OBJECT_ARRAY);
             contextLocal = newLocal(OBJECT);
 
@@ -287,7 +294,14 @@ final class Weaver {
                 storeArg(i);
             }
 
-            // Direct hooks: Hooks.onDamage(this, amount); a plain static call.
+            callDirectHeadHooks();
+
+            // Everything from here on is covered by the catch-all added in visitMaxs.
+            bodyStart = mark();
+        }
+
+        /** Hooks.onDamage(this, amount); a plain static call. */
+        private void callDirectHeadHooks() {
             for (DirectHook hook : directHead) {
                 if (!isStatic) {
                     loadThis();
@@ -295,9 +309,6 @@ final class Weaver {
                 loadArgs();
                 mv.visitMethodInsn(INVOKESTATIC, hook.owner(), hook.name(), hook.descriptor(), false);
             }
-
-            // Everything from here on is covered by the catch-all added in visitMaxs.
-            bodyStart = mark();
         }
 
         @Override
@@ -359,6 +370,9 @@ final class Weaver {
                     loadLocal(resultLocal);
                 }
                 mv.visitMethodInsn(INVOKESTATIC, hook.owner(), hook.name(), hook.descriptor(), false);
+            }
+            if (!wrapped) {
+                return;
             }
             if (opcode == RETURN) {
                 // Bridge.exit(ctx, null);

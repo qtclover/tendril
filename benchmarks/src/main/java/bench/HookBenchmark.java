@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
 public class HookBenchmark {
 
     public static class Target {
-        int field = 7;
+        int field = 7000;
 
         public int baseline(int a, int b) {
             return a + b;
@@ -94,8 +94,9 @@ public class HookBenchmark {
     }
 
     private final Target target = new Target();
-    private int a = 3;
-    private int b = 4;
+    // Outside the Integer cache (-128..127), so that boxing really allocates.
+    private int a = 3000;
+    private int b = 4000;
     private int sink;
 
     @Setup
@@ -105,7 +106,7 @@ public class HookBenchmark {
         into.method("headReadingAnArgument").atHead(call -> sink = call.<Integer>arg(0));
         into.method("headAndReturn").atHead(call -> { });
         into.method("headAndReturn").atReturn(call -> { });
-        into.method("returnReplacingTheResult").atReturn(call -> call.setResult(1));
+        into.method("returnReplacingTheResult").atReturn(call -> call.setResult(100_000));
         into.method("throwHookNotTriggered").atThrow(call -> { });
         into.method("direct").direct(At.HEAD, Direct.class, "onDirect");
         into.method("callHooked").atInvoke("helper", call -> { });
