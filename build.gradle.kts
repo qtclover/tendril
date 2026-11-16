@@ -106,3 +106,15 @@ subprojects {
         }
     }
 }
+
+// ./gradlew apiDocs  ->  build/site: the Javadoc of tendril-core and the KDoc of
+// tendril-kotlin behind one index page. The docs workflow publishes it to GitHub Pages.
+tasks.register<Sync>("apiDocs") {
+    description = "Assembles the API documentation site."
+    group = "documentation"
+    dependsOn(":tendril-core:javadoc", ":tendril-kotlin:dokkaGeneratePublicationHtml")
+    into(layout.buildDirectory.dir("site"))
+    from("docs/site")
+    from(project(":tendril-core").layout.buildDirectory.dir("docs/javadoc")) { into("java") }
+    from(project(":tendril-kotlin").layout.buildDirectory.dir("dokka/html")) { into("kotlin") }
+}

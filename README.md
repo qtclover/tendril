@@ -94,6 +94,11 @@ java -jar tendril-agent-all-0.2.0.jar attach 12345 --hooks com.example.Hooks --c
 java -jar tendril-agent-all-0.2.0.jar detach 12345
 ```
 
+Here that is timing the SQL statements and HTTP requests of a running Spring Boot
+application, then leaving again ([the demo](demo/spring-jdbc)):
+
+![Tendril timing a running Spring Boot application](docs/demo.svg)
+
 ## Good to know
 
 - Tendril loads its agent into the running JVM on first use. JDK 21+ prints a warning
@@ -105,6 +110,7 @@ java -jar tendril-agent-all-0.2.0.jar detach 12345
 
 ## Docs
 
+- [API reference](https://qtclover.github.io/tendril/): Javadoc and KDoc.
 - [Using Tendril](docs/api.md): every kind of hook, in Kotlin and Java.
 - [Attaching](docs/attaching.md): self-attach, `-javaagent`, the standalone jar, attach by pid.
 - [How it works](docs/how-it-works.md): the bytecode, the bootstrap bridge, undo, the verifier.

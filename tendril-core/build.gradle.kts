@@ -30,6 +30,15 @@ dependencies {
     testImplementation("org.ow2.asm:asm:$asmVersion")
 }
 
+// The published API documentation covers the public packages only.
+tasks.javadoc {
+    exclude("**/internal/**")
+    (options as StandardJavadocDocletOptions).apply {
+        windowTitle = "Tendril ${project.version} API"
+        links("https://docs.oracle.com/en/java/javase/17/docs/api/")
+    }
+}
+
 tasks.processResources {
     from(agentJar) {
         into("io/github/qtclover/tendril/internal")

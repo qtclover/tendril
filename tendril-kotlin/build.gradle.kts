@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm")
+    id("org.jetbrains.dokka") version "2.3.0"
 }
 
 description = "Tendril Kotlin DSL."
