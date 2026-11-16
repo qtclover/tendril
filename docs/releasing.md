@@ -5,8 +5,7 @@ complete POMs, checksums and signatures. The [release workflow](../.github/workf
 uploads them when a version tag is pushed. What it cannot do is own the account and the
 signing key; that part is done once, by hand.
 
-**Status: the build side is tested locally (staging layout, signing with a throwaway
-key). The upload step has never run, because it needs the account below.**
+**Status: 0.2.0 was released this way on 16 November 2026.**
 
 ## One-time setup
 
@@ -53,7 +52,18 @@ key). The upload step has never run, because it needs the account below.**
 3. The workflow builds, tests, signs and uploads. The upload is validated and then
    waits: open <https://central.sonatype.com/publishing/deployments>, check it, and
    press *Publish*. A published version can never be changed or removed.
-4. Update the README, which still says the library is not on Maven Central.
+4. Update the version numbers in the README and the docs.
+
+### If validation fails with "Could not find a public key"
+
+Sonatype could not fetch your public key. `keyserver.ubuntu.com` sometimes answers
+"not found" for a key it does have, which is what happened on the first two attempts at
+0.2.0. Send the key to a second server Sonatype checks, drop the failed deployment, and
+re-run the release workflow from the Actions page; the tag does not need to move.
+
+```bash
+gpg --keyserver hkps://keys.openpgp.org --send-keys <KEY_ID>
+```
 
 ## Trying it without publishing
 

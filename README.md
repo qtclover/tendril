@@ -1,5 +1,9 @@
 # Tendril
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.qtclover/tendril-core)](https://central.sonatype.com/namespace/io.github.qtclover)
+[![CI](https://github.com/qtclover/tendril/actions/workflows/ci.yml/badge.svg)](https://github.com/qtclover/tendril/actions/workflows/ci.yml)
+[![API docs](https://img.shields.io/badge/API-docs-blue)](https://qtclover.github.io/tendril/)
+
 Hook the methods of a running JVM from Kotlin or Java, and unhook them again.
 No `-javaagent` flag, no mod loader, no build plugin.
 
@@ -59,20 +63,29 @@ call with the real arguments, no boxing. See the [benchmarks](docs/benchmarks.md
 
 ## Install
 
-Not on Maven Central yet. Build it into your local Maven repository:
+Tendril is on Maven Central.
 
-```bash
-./gradlew publishToMavenLocal
-```
+Gradle:
 
 ```kotlin
-repositories { mavenLocal(); mavenCentral() }
-
 dependencies {
     implementation("io.github.qtclover:tendril-kotlin:0.2.0")   // Kotlin DSL + core
     // Java only: implementation("io.github.qtclover:tendril-core:0.2.0")
 }
 ```
+
+Maven:
+
+```xml
+<dependency>
+    <groupId>io.github.qtclover</groupId>
+    <artifactId>tendril-core</artifactId>
+    <version>0.2.0</version>
+</dependency>
+```
+
+The standalone agent jar, for hooking an application you cannot change, is
+[`tendril-agent-all`](https://repo1.maven.org/maven2/io/github/qtclover/tendril-agent-all/0.2.0/tendril-agent-all-0.2.0.jar).
 
 Needs Java 17 or newer.
 
